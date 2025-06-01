@@ -1,0 +1,5 @@
+/sample_photos
+yolo*.pt
+/path
+/.venv
+.DS_Store
