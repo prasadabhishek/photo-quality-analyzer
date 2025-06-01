@@ -503,13 +503,12 @@ def process_folder(folder_path: str, verbose: bool, move_files: bool):
                 processed_count += 1
 
                 # Conditional logging based on verbosity for individual results
-                if verbose:
+                if verbose:  # Full JSON output if verbose
                     logger.info(
                         f"--- Results for {filename} ---\n{json.dumps(result, indent=2)}")
-                else:
-                    # For non-verbose, tqdm might be enough, or a very brief summary
-                    # logger.info(f"Processed: {filename} - Judgement: {result['judgement']}")
-                    pass  # tqdm handles progress, detailed logs for verbose only
+                elif not move_files:  # Not verbose AND not moving files, provide a summary
+                    logger.info(
+                        f"Processed: {filename} - Judgement: {result['judgement']} (Confidence: {result['overall_confidence']:.2f}) - Summary: {result['judgement_description']}")
 
                 if move_files:
                     destination_folder = ""
