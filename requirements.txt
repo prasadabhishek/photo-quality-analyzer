@@ -2,3 +2,7 @@ opencv-python
 numpy
 ultralytics
 tqdm
+fastmcp
+rawpy
+exifread
+scipy

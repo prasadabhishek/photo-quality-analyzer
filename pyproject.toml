@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "photo_quality_analyzer_core"
+version = "0.2.0"
+authors = [
+  { name="Abhishek Prasad" },
+]
+description = "The Python SDK for Local Computer Vision & Signal Processing"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Multimedia :: Graphics :: Capture :: Digital Camera",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "opencv-python>=4.10.0",
+    "numpy>=1.26.0",
+    "ultralytics>=8.3.0",
+    "tqdm>=4.66.0",
+    "exifread>=3.0.0",
+    "scipy>=1.14.0"
+]
+
+[project.optional-dependencies]
+raw = ["rawpy>=0.19.0"]
+test = ["unittest"]
+
+[tool.setuptools]
+packages = ["photo_quality_analyzer_core"]
