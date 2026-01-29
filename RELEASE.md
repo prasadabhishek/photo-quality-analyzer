@@ -34,10 +34,14 @@ Start by uploading to TestPyPI:
 ```bash
 twine upload --repository testpypi dist/*
 ```
+*   **Username**: `__token__` (Recommended) or `abhishek.a.prasad`
+*   **Password**: Your PyPI API Token (pypi-...) or account password.
+*   *Note: Detailed instructions on [creating API tokens](https://pypi.org/help/#apitoken).*
+
 *Verify on [test.pypi.org](https://test.pypi.org/project/photo-quality-analyzer-core/).*
 
 ## 🌍 5. Publish (Production)
-Upload to the real PyPI:
+Upload to the real PyPI. **The first upload registers the package to your account.**
 ```bash
 twine upload dist/*
 ```
