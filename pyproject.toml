@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-raw = ["rawpy>=0.19.0"]
+raw = ["rawpy>=0.26.0"]
 test = ["unittest"]
 
 [tool.setuptools]

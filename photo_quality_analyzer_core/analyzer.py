@@ -10,6 +10,12 @@ try:
         rawpy = None
     from scipy.fftpack import fft2, fftshift
     from scipy.stats import entropy
+    from .context_helpers import (
+        adjust_sharpness_for_aperture,
+        get_camera_dynamic_range_baseline,
+        get_exposure_tolerance,
+        get_expected_focus_area
+    )
 except ImportError as e:
     print(f"ImportError: {e}")
     print("One or more required Python packages are not installed.")
@@ -70,7 +76,7 @@ def load_config(config_file_path=CONFIG_FILE_PATH):
             'YOLO_NMS_THRESHOLD': config.getfloat('Thresholds', 'yolo_nms', fallback=0.45),
             'OVERALL_CONF_TECH_WEIGHT': config.getfloat('Weights', 'overall_tech', fallback=0.6),
             'OVERALL_CONF_OTHER_WEIGHT': config.getfloat('Weights', 'overall_other', fallback=0.4),
-            'YOLO_MODEL_PATH_DEFAULT': config.get('Models', 'default_yolo_model', fallback="yolo12x.pt"),
+            'YOLO_MODEL_PATH_DEFAULT': config.get('Models', 'default_yolo_model', fallback="yolo11n.pt"),
             'JUDGEMENT_EXCELLENT': config.getfloat('JudgementLevels', 'excellent', fallback=0.9),
             'JUDGEMENT_GOOD': config.getfloat('JudgementLevels', 'good', fallback=0.7),
             'JUDGEMENT_FAIR': config.getfloat('JudgementLevels', 'fair', fallback=0.5),
@@ -91,7 +97,7 @@ YOLO_CONFIDENCE_THRESHOLD = _cfg.get('YOLO_CONFIDENCE_THRESHOLD', 0.5)
 YOLO_NMS_THRESHOLD = _cfg.get('YOLO_NMS_THRESHOLD', 0.45)
 OVERALL_CONF_TECH_WEIGHT = _cfg.get('OVERALL_CONF_TECH_WEIGHT', 0.6)
 OVERALL_CONF_OTHER_WEIGHT = _cfg.get('OVERALL_CONF_OTHER_WEIGHT', 0.4)
-YOLO_MODEL_PATH_DEFAULT = _cfg.get('YOLO_MODEL_PATH_DEFAULT', "yolo12x.pt")
+YOLO_MODEL_PATH_DEFAULT = _cfg.get('YOLO_MODEL_PATH_DEFAULT', "yolo11n.pt")
 JUDGEMENT_EXCELLENT = _cfg.get('JUDGEMENT_EXCELLENT', 0.9)
 JUDGEMENT_GOOD = _cfg.get('JUDGEMENT_GOOD', 0.7)
 JUDGEMENT_FAIR = _cfg.get('JUDGEMENT_FAIR', 0.5)
@@ -99,7 +105,84 @@ JUDGEMENT_POOR = _cfg.get('JUDGEMENT_POOR', 0.3)
 
 COCO_NAMES_FILE_PATH_DEFAULT = "coco.names"
 RAW_EXTENSIONS = {'.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw'}
-SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw')
+SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3', '.rw2', '.nrw', '.gpr', '.sr2', '.pef', '.rwl')
+
+# --- Camera Capability Database (Phase 2) ---
+# Dynamic Range capabilities by camera model (in stops)
+CAMERA_DYNAMIC_RANGE = {
+    # High-DR cameras (14+ stops)
+    'Sony A7R V': 14.8,
+    'Sony A7R IV': 14.7,
+    'Sony A7R III': 14.7,
+    'Nikon Z9': 14.5,
+    'Nikon Z8': 14.5,
+    'Canon EOS R5': 14.0,
+    'Canon EOS R3': 14.2,
+    
+    # Mid-range (12-14 stops)
+    'Sony A7 IV': 13.0,
+    'Sony A7 III': 13.0,
+    'Sony A7S III': 13.0,
+    'Fujifilm X-T5': 13.0,
+    'Fujifilm X-H2S': 13.0,
+    'Canon EOS R6': 12.5,
+    'Canon EOS R': 12.5,
+    'Nikon Z6 II': 12.7,
+    
+    # Entry-level (10-12 stops)
+    'Canon EOS M50': 11.5,
+    'Canon EOS M200': 11.0,
+    'Sony A6400': 12.0,
+    'Sony A6100': 11.8,
+    'Fujifilm X-T30': 12.0,
+    
+    # Compact cameras (9-11 stops)
+    'Sony RX100 VII': 11.0,
+    'Sony RX100M7': 11.0,
+    'Sony RX100 VI': 10.5,
+    'Fujifilm X100V': 12.0,
+    'Canon G7 X Mark III': 10.5,
+}
+
+# Sensor sizes for diffraction limit calculation
+SENSOR_SIZES = {
+    'full_frame': {'diffraction_limit': 16.0, 'coc': 0.030},
+    'aps_c': {'diffraction_limit': 11.0, 'coc': 0.020},
+    'micro_four_thirds': {'diffraction_limit': 8.0, 'coc': 0.015},
+    'one_inch': {'diffraction_limit': 5.6, 'coc': 0.011},
+    'one_over_two_three': {'diffraction_limit': 4.0, 'coc': 0.006},
+}
+
+def detect_sensor_size(camera_model: str) -> str:
+    """Detects sensor size based on camera model."""
+    if not camera_model:
+        return 'full_frame'  # Default assumption
+    
+    model_upper = camera_model.upper()
+    
+    # Full frame indicators
+    if any(x in model_upper for x in ['A7', 'A9', 'Z9', 'Z8', 'Z6', 'Z7', 'EOS R5', 'EOS R6', 'EOS R3', '1DX', '5D', '6D']):
+        return 'full_frame'
+    
+    # APS-C indicators
+    if any(x in model_upper for x in ['A6', 'X-T', 'X-H', 'X-E', 'X-S', 'X-PRO', 'EOS M', 'EOS R7', 'EOS R10', '90D', '80D', '70D', 'D500', 'D7', 'D5']):
+        return 'aps_c'
+    
+    # Micro Four Thirds
+    if any(x in model_upper for x in ['E-M', 'E-PL', 'E-P', 'GH', 'G9', 'G7', 'GX']):
+        return 'micro_four_thirds'
+    
+    # 1-inch sensors
+    if any(x in model_upper for x in ['RX100', 'RX10', 'G7 X', 'G5 X']):
+        return 'one_inch'
+    
+    # Small sensors
+    if any(x in model_upper for x in ['G3 X', 'SX', 'POWERSHOT']):
+        return 'one_over_two_three'
+    
+    return 'full_frame'  # Default fallback
+
+
 
 # Global model variables for lazy loading
 g_yolo_model = None
@@ -178,12 +261,24 @@ def load_yolo_model_and_names(model_path: str, coco_names_file_path: str) -> tup
     return loaded_model, loaded_coco_names
 
 
-def ensure_yolo_initialized():
-    """Ensure that the global YOLO model is loaded."""
+def ensure_yolo_initialized(model_size: str = "nano"):
+    """Ensure that the global YOLO model is loaded with the requested size."""
     global g_yolo_model, g_coco_names
-    if g_yolo_model is None:
-        g_yolo_model, g_coco_names = load_yolo_model_and_names(
-            YOLO_MODEL_PATH_DEFAULT, COCO_NAMES_FILE_PATH_DEFAULT)
+    
+    # Map friendly names to model files
+    model_map = {
+        "nano": "yolo11n.pt",
+        "xlarge": "yolo12x.pt"
+    }
+    requested_model = model_map.get(model_size.lower(), "yolo11n.pt")
+    
+    # If the model is already loaded and matches the requested size, skip
+    # (Note: g_yolo_model.model_name might differ if path is used, so we check the active config)
+    if g_yolo_model is not None:
+        return True
+        
+    g_yolo_model, g_coco_names = load_yolo_model_and_names(
+        requested_model, COCO_NAMES_FILE_PATH_DEFAULT)
     return g_yolo_model is not None
 
 
@@ -274,22 +369,38 @@ def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None) -> tuple[f
     
     # Final Sharpness Score: Combination of HF energy and Directionality
     # We use sqrt of directionality to be less aggressive than squaring for stability
-    score = min((mean_hf / (h*w)) * np.sqrt(directionality) * 8000.0, 1.0)
+    raw_score = min((mean_hf / (h*w)) * np.sqrt(directionality) * 8000.0, 1.0)
+    
+    # Phase 2: Aperture-aware adjustment
+    aperture = metadata.get("aperture") if metadata else None
+    camera_model = metadata.get("camera_model") if metadata else None
+    sensor_size = detect_sensor_size(camera_model) if camera_model else 'full_frame'
+    
+    if aperture is not None:
+        adjusted_score, aperture_context = adjust_sharpness_for_aperture(raw_score, aperture, sensor_size, SENSOR_SIZES)
+        score = adjusted_score
+    else:
+        score = raw_score
+        aperture_context = ""
     
     # EXIF Interpretation
     if metadata and metadata.get("shutter_speed") and metadata["shutter_speed"] >= 0.03: # slower than 1/30s
         score = min(score * 1.5, 1.0)
         explanation = "Artistic motion blur likely due to slow shutter."
     else:
-        explanation = "Edges are sharp and directional." if score > 0.6 else "Image is blurry or dominated by random noise."
+        base_explanation = "Edges are sharp and directional." if score > 0.6 else "Image is blurry or dominated by random noise."
+        if aperture_context:
+            explanation = f"{base_explanation} ({aperture_context})"
+        else:
+            explanation = base_explanation
     
     return float(score), explanation
 
 
 def _calculate_focus_area(
-    img: np.ndarray, gray_img: np.ndarray, overall_sharpness_score: float
+    img: np.ndarray, gray_img: np.ndarray, overall_sharpness_score: float, metadata: dict = None
 ) -> tuple[float, str, set[str], str | None]:
-    """Calculates focus on the main subject using YOLO."""
+    """Calculates focus on the main subject using YOLO with depth-of-field awareness."""
     global g_yolo_model, g_coco_names  # Access global model and names
 
     height, width = gray_img.shape
@@ -329,8 +440,26 @@ def _calculate_focus_area(
                             gray_roi, cv2.CV_64F).var()
                         focus_score = min(
                             laplacian_var_roi / FOCUS_AREA_NORMALIZATION_FACTOR, 1.0)
-                        focus_explanation = "Main subject is in sharp focus." if focus_score > 0.8 \
-                                            else "Main subject is slightly out of focus."
+                        
+                        # Phase 2: DOF-aware adjustment
+                        aperture = metadata.get("aperture") if metadata else None
+                        focal_length = metadata.get("focal_length") if metadata else None
+                        
+                        if aperture is not None and focal_length is not None:
+                            dof_factor = get_expected_focus_area(aperture, focal_length)
+                            # If DOF is shallow (low factor), we are more lenient with focus scores
+                            # If DOF is deep (high factor), we expect higher sharpness
+                            if dof_factor < 0.5:  # Shallow DOF
+                                focus_score = min(focus_score * 1.5, 1.0)
+                                focus_explanation = "Main subject is in sharp focus (shallow DOF expected)." if focus_score > 0.7 \
+                                                    else "Main subject is slightly out of focus for shallow DOF."
+                            else:
+                                focus_explanation = "Main subject is in sharp focus." if focus_score > 0.8 \
+                                                    else "Main subject is slightly out of focus."
+                        else:
+                            focus_explanation = "Main subject is in sharp focus." if focus_score > 0.8 \
+                                                else "Main subject is slightly out of focus."
+                        
                         # Get the name of the main subject
                         if g_coco_names and main_subject_class_id < len(g_coco_names) and g_coco_names[main_subject_class_id] is not None:
                             main_subj_name = g_coco_names[main_subject_class_id]
@@ -359,8 +488,8 @@ def _calculate_focus_area(
     return focus_score, focus_explanation, detected_obj_names, main_subj_name
 
 
-def _calculate_exposure(gray_img: np.ndarray) -> tuple[float, str]:
-    """Calculates exposure using Zone System clipping analysis."""
+def _calculate_exposure(gray_img: np.ndarray, metadata: dict = None) -> tuple[float, str]:
+    """Calculates exposure using Zone System clipping analysis with context awareness."""
     total_pixels = gray_img.size
     highlight_clip = np.sum(gray_img > 250) / total_pixels
     shadow_clip = np.sum(gray_img < 5) / total_pixels
@@ -368,20 +497,37 @@ def _calculate_exposure(gray_img: np.ndarray) -> tuple[float, str]:
     mean_intensity = np.mean(gray_img)
     ideal_mean = EXPOSURE_IDEAL_MEAN_INTENSITY
     
-    # Penalty for clipping data (tuned for more forgiveness)
-    clipping_penalty = (max(0, highlight_clip - 0.02) + max(0, shadow_clip - 0.05)) * 2.0
+    # Phase 2: Context-aware clipping tolerance
+    shutter_speed = metadata.get("shutter_speed") if metadata else None
+    tolerance = get_exposure_tolerance(shutter_speed)
+    
+    # Use context-specific tolerances
+    highlight_tolerance = tolerance['highlight_clip_tolerance']
+    shadow_tolerance = tolerance['shadow_clip_tolerance']
+    
+    # Penalty for clipping data beyond tolerance
+    clipping_penalty = (max(0, highlight_clip - highlight_tolerance) + max(0, shadow_clip - shadow_tolerance)) * 2.0
     
     # Base score on mean deviance
     base_score = max(0.0, 1.0 - abs(mean_intensity - ideal_mean) / ideal_mean)
     
     score = max(0.0, base_score - clipping_penalty)
     
+    # Context-aware explanations
     if highlight_clip > 0.1:
         explanation = "Excessive highlight clipping."
     elif shadow_clip > 0.2:
         explanation = "Excessive shadow clipping."
     else:
-        explanation = "Exposure is technically sound." if score > 0.7 else "Exposure shows some clipping or deviance."
+        if score > 0.7:
+            if tolerance['context'] == 'action':
+                explanation = "Exposure is technically sound for action photography."
+            elif tolerance['context'] == 'precision':
+                explanation = "Exposure is technically sound for long exposure."
+            else:
+                explanation = "Exposure is technically sound."
+        else:
+            explanation = "Exposure shows some clipping or deviance."
         
     return float(score), explanation
 
@@ -405,15 +551,48 @@ def _calculate_noise(gray_img: np.ndarray, metadata: dict = None) -> tuple[float
     variances.sort()
     noise_floor = np.mean(variances[:5])
     
-    # Normalize noise floor
-    # High ISO images can have noise_floor > 100
-    norm_factor = NOISE_NORMALIZATION_FACTOR
+    # ISO-adaptive normalization factor
+    iso = metadata.get("iso") if metadata else None
     
-    if metadata and metadata.get("iso") and metadata["iso"] > 1600:
-        norm_factor *= 2.0  # Be more lenient for high ISO
-        
+    if iso is None:
+        # Fallback: assume moderate ISO (400-800 range)
+        norm_factor = 400.0
+    elif iso <= 200:
+        # Base ISO: expect very clean images
+        norm_factor = 300.0
+    elif iso <= 800:
+        # Low-moderate ISO: still quite clean
+        norm_factor = 500.0
+    elif iso <= 3200:
+        # High ISO: more noise is expected
+        norm_factor = 800.0
+    elif iso <= 12800:
+        # Very high ISO: significant noise is normal
+        norm_factor = 1500.0
+    else:
+        # Extreme ISO: noise is unavoidable
+        norm_factor = 2500.0
+    
     score = max(1.0 - noise_floor / norm_factor, 0.0)
-    explanation = "Minimal sensor noise detected." if score > 0.8 else "Noticeable sensor noise or high-frequency grain."
+    
+    # Context-aware explanation
+    if score > 0.8:
+        explanation = "Minimal sensor noise detected."
+    elif score > 0.6:
+        if iso and iso > 1600:
+            explanation = f"Clean image for ISO {iso}."
+        else:
+            explanation = "Low noise levels detected."
+    elif score > 0.4:
+        if iso and iso > 3200:
+            explanation = f"Acceptable noise for ISO {iso}."
+        else:
+            explanation = "Moderate sensor noise detected."
+    else:
+        if iso and iso > 6400:
+            explanation = f"High noise typical of ISO {iso}."
+        else:
+            explanation = "Noticeable sensor noise or high-frequency grain."
     
     return float(score), explanation
 
@@ -454,15 +633,34 @@ def _calculate_color_balance_legacy(img: np.ndarray) -> tuple[float, str]:
     return float(score), "Overall color distribution is balanced."
 
 
-def _calculate_dynamic_range(gray_img: np.ndarray) -> tuple[float, str]:
-    """Calculates dynamic range using Shannon Entropy for information density."""
+def _calculate_dynamic_range(gray_img: np.ndarray, metadata: dict = None) -> tuple[float, str]:
+    """Calculates dynamic range using Shannon Entropy with camera-specific baseline adjustment."""
     hist = cv2.calcHist([gray_img], [0], None, [256], [0, 256])
     hist = hist.ravel() / (hist.sum() + 1e-6) # Normalize for entropy
     
     # Calculate Shannon Entropy
     # Max entropy for 256 bins is log2(256) = 8.0
     info_entropy = entropy(hist, base=2)
-    score = min(info_entropy / 8.0, 1.0)
+    raw_score = min(info_entropy / 8.0, 1.0)
+    
+    # Phase 2: Camera-specific DR baseline adjustment
+    camera_model = metadata.get("camera_model") if metadata else None
+    iso = metadata.get("iso") if metadata else None
+    
+    if camera_model or iso:
+        expected_dr = get_camera_dynamic_range_baseline(camera_model, iso, CAMERA_DYNAMIC_RANGE)
+        # Normalize score to camera capability
+        # If camera has 14 stops and we're using 12, that's 12/14 = 0.86 of potential
+        # Adjust the raw score based on how we're utilizing the camera's capability
+        baseline_dr = 12.0  # Standard reference
+        if expected_dr > 0:
+            capability_factor = baseline_dr / expected_dr
+            # Don't penalize good cameras too much, just adjust slightly
+            score = min(raw_score * (0.8 + 0.2 * capability_factor), 1.0)
+        else:
+            score = raw_score
+    else:
+        score = raw_score
     
     explanation = "Rich tonal information and wide dynamic range." if score > 0.7 else "Flat tones or limited information density (low contrast)."
     return float(score), explanation
@@ -503,9 +701,10 @@ def _calculate_composition(img_shape: tuple, detections: list) -> tuple[float, s
 
 
 def extract_palette(image_path: str, num_colors: int = 5) -> list[str]:
-    """Extracts dominant colors from an image using K-Means."""
-    img = cv2.imread(image_path)
+    """Extracts dominant colors from an image using K-Means. Supports RAW files."""
+    img = _load_image_with_raw_support(image_path)
     if img is None:
+        logger.warning(f"Could not load image for palette extraction: {image_path}")
         return []
         
     # Resize for speed
@@ -536,27 +735,27 @@ def _generate_assessment_summary(
     noise_score: float,
     color_balance_score: float,
     dynamic_range_score: float,
-    detected_object_names: set[str]
-) -> tuple[str, str, str]:
+    detected_object_names: set[str],
+    focus_area_score: float, # Added for reasoning
+    composition_score: float # Added for reasoning
+) -> dict: # Changed return type to dict
     """Generates judgement and descriptions based on numerical scores."""
-    # Determine Judgement based on refined Composite Score
-    judgement = (
-        "Excellent" if overall_confidence >= 0.9 else
-        "Good" if overall_confidence >= 0.7 else
-        "Fair" if overall_confidence >= 0.4 else
-        "Poor" if overall_confidence >= 0.2 else
-        "Very Poor"
-    )
-
+    
+    # Initialize variables
     jd_parts = []
     
-    # Metadata context alert
-    if metadata_status == "missing":
-        jd_parts.append("[Technical-Only Analysis: Metering metadata missing]")
+    # Determine overall judgement based on confidence
+    if overall_confidence >= 0.8:
+        judgement = "Excellent"
+    elif overall_confidence >= 0.65:
+        judgement = "Good"
+    elif overall_confidence >= 0.5:
+        judgement = "Acceptable"
+    elif overall_confidence >= 0.35:
+        judgement = "Poor"
     else:
-        jd_parts.append("[Context-Aware Analysis: Metadata active]")
-
-    # Overall Summary
+        judgement = "Very Poor"
+    
     jd_parts.append(f"The technical integrity is rated as {judgement.lower()}.")
 
     # Subject assessment
@@ -626,14 +825,15 @@ def _generate_assessment_summary(
 def _load_image_with_raw_support(image_path: str) -> np.ndarray | None:
     """Loads an image, with special handling for RAW files via rawpy or embedded previews."""
     ext = os.path.splitext(image_path)[1].lower()
-    raw_extensions = {'.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3'}
+    raw_extensions = {'.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3', '.rw2', '.nrw', '.gpr', '.sr2', '.pef', '.rwl'}
     
     if ext in raw_extensions:
         # 1. Primary: Use rawpy for high-fidelity extraction if available
         if rawpy is not None:
             try:
                 with rawpy.imread(image_path) as raw:
-                    rgb = raw.postprocess(use_camera_wb=True, no_auto_bright=False, bright=1.0)
+                    # Turbo Optimization: use half_size=True for 8x faster decoding during culling
+                    rgb = raw.postprocess(use_camera_wb=True, no_auto_bright=False, bright=1.0, half_size=True)
                     return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             except Exception as e:
                 logger.warning(f"Rawpy failed for {image_path}: {e}. Falling back to ExifRead.")
@@ -717,7 +917,7 @@ def write_xmp_sidecar(image_path: str, rating: int = 0, label: str = ""):
         logger.error(f"Failed to write XMP for {image_path}: {e}")
 
 
-def evaluate_photo_quality(image_path: str, requested_metrics: list[str] = None, enable_subject_detection: bool = True) -> dict:
+def evaluate_photo_quality(image_path: str, requested_metrics: list[str] = None, enable_subject_detection: bool = True, model_size: str = "nano") -> dict:
     """
     Main entry point for quality evaluation. 
     Implements a context-aware composite scoring system.
@@ -745,7 +945,7 @@ def evaluate_photo_quality(image_path: str, requested_metrics: list[str] = None,
     # 0. Initialize Models (Only if focus or composition requested)
     needs_yolo = "focus" in requested or "composition" in requested
     if needs_yolo:
-        ensure_yolo_initialized()
+        ensure_yolo_initialized(model_size=model_size)
 
     # Metrics Storage
     results = {}
@@ -764,13 +964,13 @@ def evaluate_photo_quality(image_path: str, requested_metrics: list[str] = None,
     detected_object_names = []
     if "focus" in requested:
         focus_area_score, focus_area_explanation, detected_object_names, main_subject_name = \
-            _calculate_focus_area(img, gray, sharpness_score)
+            _calculate_focus_area(img, gray, sharpness_score, metadata)
         results["focus"] = {"score": float(focus_area_score), "explanation": focus_area_explanation}
     
     # Exposure
     exposure_score = 1.0
     if "exposure" in requested:
-        exposure_score, exposure_explanation = _calculate_exposure(gray)
+        exposure_score, exposure_explanation = _calculate_exposure(gray, metadata)
         results["exposure"] = {"score": float(exposure_score), "explanation": exposure_explanation}
         
     # Noise
@@ -790,7 +990,7 @@ def evaluate_photo_quality(image_path: str, requested_metrics: list[str] = None,
     # Dynamic Range
     dynamic_range_score = 1.0
     if "dynamicRange" in requested:
-        dynamic_range_score, dynamic_range_explanation = _calculate_dynamic_range(gray)
+        dynamic_range_score, dynamic_range_explanation = _calculate_dynamic_range(gray, metadata)
         results["dynamicRange"] = {"score": float(dynamic_range_score), "explanation": dynamic_range_explanation}
         
     # Composition
@@ -834,7 +1034,8 @@ def evaluate_photo_quality(image_path: str, requested_metrics: list[str] = None,
         results.get("focus", {}).get("explanation", "N/A"), 
         main_subject_name,
         sharpness_score, exposure_score, noise_score, color_balance_score,
-        dynamic_range_score, detected_object_names
+        dynamic_range_score, detected_object_names,
+        focus_area_score, composition_score  # Added missing arguments
     )
 
     return {
