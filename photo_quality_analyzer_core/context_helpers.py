@@ -7,16 +7,16 @@ import numpy as np
 
 def adjust_sharpness_for_aperture(raw_score: float, aperture: float, sensor_size: str, sensor_sizes: dict) -> tuple[float, str]:
     """
-    Adjusts sharpness score based on aperture and diffraction physics.
+    Adjusts the raw sharpness score based on the physics of diffraction.
     
-    Args:
-        raw_score: Raw sharpness score from FFT analysis
-        aperture: F-number (e.g., 5.6, 16, 22)
-        sensor_size: Sensor size category
-        sensor_sizes: Dictionary of sensor size info
+    Science:
+    Every lens has a "Diffraction-Limited Aperture" (DLA). Beyond this point,
+    the Airy Disk (blur pattern) becomes larger than the sensor's pixels,
+    causing natural softness. This function prevents penalizing photographers
+    for using narrow apertures (e.g., f/22 for landscapes) where softness
+    is a physical inevitability, not a flaw.
     
-    Returns:
-        (adjusted_score, context_note)
+    Ref: https://www.cambridgeincolour.com/tutorials/diffraction-photography.htm
     """
     if aperture is None or sensor_size not in sensor_sizes:
         return raw_score, ""
@@ -62,7 +62,17 @@ def adjust_sharpness_for_aperture(raw_score: float, aperture: float, sensor_size
 
 
 def get_camera_dynamic_range_baseline(camera_model: str, iso: int, camera_dr_db: dict) -> float:
-    """Returns expected dynamic range in stops for a given camera and ISO."""
+    """
+    Returns the expected Dynamic Range (DR) in stops for a given camera and ISO.
+    
+    Science:
+    Dynamic Range typically peaks at the base ISO (usually ISO 100) and drops
+    by approximately 0.5 to 1.0 stops for every 1-stop increase in ISO. 
+    This function uses a baseline from industry benchmarks (DXOMARK) and
+    calculates the expected effective DR for the specific shooting conditions.
+    
+    Ref: https://www.photonstophotos.net/Charts/PDR.htm
+    """
     baseline_dr = 12.0
     
     if camera_model:
@@ -81,7 +91,16 @@ def get_camera_dynamic_range_baseline(camera_model: str, iso: int, camera_dr_db:
 
 
 def get_exposure_tolerance(shutter_speed: float) -> dict:
-    """Returns acceptable exposure clipping tolerances based on shutter speed."""
+    """
+    Determines acceptable clipping tolerances based on the "Action Context."
+    
+    Science:
+    - Action shots (fast shutter speed) often involve high-contrast scenes
+      where highlight preservation is prioritized over shadows.
+    - Long exposures (slow shutter speed) are typically tripod-based 
+      landscapes where precise tonal mapping across the whole histogram 
+      is required.
+    """
     if shutter_speed is None:
         return {'highlight_clip_tolerance': 0.02, 'shadow_clip_tolerance': 0.02, 'context': 'general'}
     
@@ -95,9 +114,15 @@ def get_exposure_tolerance(shutter_speed: float) -> dict:
 
 def get_expected_focus_area(aperture: float, focal_length: float) -> float:
     """
-    Calculates expected in-focus area factor based on aperture and focal length.
+    Calculates the expected in-focus area factor based on Depth-of-Field (DOF).
     
-    Returns a factor (0.0 to 1.0) indicating how much of the scene is expected to be in focus.
+    Science:
+    Depth-of-Field is a function of Aperture, Focal Length, and subject 
+    distance. This function uses a heuristic based on the relationship 
+    where DOF is proportional to aperture and inversely proportional to 
+    the square of the focal length.
+    
+    Ref: https://en.wikipedia.org/wiki/Depth_of_field
     """
     if aperture is None or focal_length is None:
         return 0.5  # Neutral default

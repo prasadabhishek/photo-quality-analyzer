@@ -1,3 +1,20 @@
+"""
+Photo Quality Analyzer Core
+---------------------------
+A local-first visual intelligence engine that uses signal processing and 
+computer vision to assess photographic quality with context awareness.
+
+Scientific Foundation:
+- Optical Physics (Diffraction, Depth-of-Field)
+- Signal Processing (FFT, Laplacian Variance)
+- Information Theory (Shannon Entropy for Dynamic Range)
+- Computer Vision (YOLO-based Subject Detection)
+
+Sources:
+- DXOMARK: https://www.dxomark.com/ (Sensor Benchmarks)
+- Photons to Photos: https://www.photonstophotos.net/ (Dynamic Range Curves)
+- Cambridge in Colour: https://www.cambridgeincolour.com/ (Optical Theory)
+"""
 try:
     import cv2
     import numpy as np
@@ -108,7 +125,9 @@ RAW_EXTENSIONS = {'.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw'}
 SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3', '.rw2', '.nrw', '.gpr', '.sr2', '.pef', '.rwl')
 
 # --- Camera Capability Database (Phase 2) ---
-# Dynamic Range capabilities by camera model (in stops)
+# Dynamic Range capabilities by camera model (in stops).
+# Values are sourced from PhotonsToPhotos (https://www.photonstophotos.net/) 
+# and DXOMARK (https://www.dxomark.com/) based on base ISO measurements.
 CAMERA_DYNAMIC_RANGE = {
     # High-DR cameras (14+ stops)
     'Sony A7R V': 14.8,
@@ -144,7 +163,10 @@ CAMERA_DYNAMIC_RANGE = {
     'Canon G7 X Mark III': 10.5,
 }
 
-# Sensor sizes for diffraction limit calculation
+# Sensor sizes and corresponding optical limits.
+# diffraction_limit: The aperture where the Airy Disk size exceeds the pixel pitch.
+# coc: Circle of Confusion used for Depth-of-Field (DOF) calculations (Leica standard).
+# Ref: https://www.cambridgeincolour.com/tutorials/diffraction-photography.htm
 SENSOR_SIZES = {
     'full_frame': {'diffraction_limit': 16.0, 'coc': 0.030},
     'aps_c': {'diffraction_limit': 11.0, 'coc': 0.020},
@@ -154,7 +176,11 @@ SENSOR_SIZES = {
 }
 
 def detect_sensor_size(camera_model: str) -> str:
-    """Detects sensor size based on camera model."""
+    """
+    Detects the physical sensor size category based on the camera model string.
+    Maps models to their corresponding sensor format to allow for physics-aware
+    adjustments (e.g., diffraction limits).
+    """
     if not camera_model:
         return 'full_frame'  # Default assumption
     
@@ -317,7 +343,21 @@ def _extract_metadata(image_path: str) -> dict:
 # --- Metric Calculation Helper Functions ---
 
 def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None) -> tuple[float, str]:
-    """Calculates image sharpness using FFT anisotropy (directionality) analysis."""
+    """
+    Calculates image sharpness using FFT Anisotropy (Directionality) analysis.
+    
+    Science:
+    Uses the Fast Fourier Transform (FFT) to analyze the spatial frequency 
+    distribution. High scores reflect a high ratio of high-frequency components
+    relative to the total energy, indicating fine detail and sharp edges.
+    
+    Aperture-Awareness:
+    Adjusts the score based on the "diffraction-limited aperture" (DLA). If a
+    narrow aperture (like f/22) is used, the system recognizes that physics
+    prevents tack-sharpness and normalizes expectations accordingly.
+    
+    Ref: https://www.cambridgeincolour.com/tutorials/sharpness.htm
+    """
     # Compute FFT
     f_transform = fft2(gray_img)
     f_shift = fftshift(f_transform)
@@ -400,7 +440,19 @@ def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None) -> tuple[f
 def _calculate_focus_area(
     img: np.ndarray, gray_img: np.ndarray, overall_sharpness_score: float, metadata: dict = None
 ) -> tuple[float, str, set[str], str | None]:
-    """Calculates focus on the main subject using YOLO with depth-of-field awareness."""
+    """
+    Assesses focus accuracy on the main subject using YOLO and Laplacian Variance.
+    
+    Science:
+    1. Identifies the primary "subject" using the YOLO neural network.
+    2. Measures the Laplacian Variance (edge density) within the subject's 
+       bounding box (ROI).
+    3. Factors in Depth-of-Field (DOF): At wide apertures (e.g. f/1.4), 
+       sharpness expectations are concentrated strictly on the subject, while
+       deep-DOF images (f/11) are expected to be sharp across more of the frame.
+    
+    Ref: https://en.wikipedia.org/wiki/Depth_of_field
+    """
     global g_yolo_model, g_coco_names  # Access global model and names
 
     height, width = gray_img.shape
@@ -489,7 +541,21 @@ def _calculate_focus_area(
 
 
 def _calculate_exposure(gray_img: np.ndarray, metadata: dict = None) -> tuple[float, str]:
-    """Calculates exposure using Zone System clipping analysis with context awareness."""
+    """
+    Evaluates exposure balance using Zone System principles and clipping analysis.
+    
+    Science:
+    Analyzes the histogram to detect "blown highlights" (clipping at 255) and
+    "crushed shadows" (clipping at 0). It calculates the deviance from an
+    ideal mean intensity (middle gray).
+    
+    Context-Awareness:
+    Shutter speed determines the "clipping tolerance." Action shots (1/1000s)
+    are granted more leniency for highlight preservation, while long exposures
+    are expected to have precise tonal mapping.
+    
+    Ref: https://en.wikipedia.org/wiki/Zone_System
+    """
     total_pixels = gray_img.size
     highlight_clip = np.sum(gray_img > 250) / total_pixels
     shadow_clip = np.sum(gray_img < 5) / total_pixels
@@ -533,7 +599,21 @@ def _calculate_exposure(gray_img: np.ndarray, metadata: dict = None) -> tuple[fl
 
 
 def _calculate_noise(gray_img: np.ndarray, metadata: dict = None) -> tuple[float, str]:
-    """Estimates sensor noise using multi-patch variance analysis."""
+    """
+    Estimates sensor noise levels using multi-patch variance analysis.
+    
+    Science:
+    Calculates the Local Standard Deviation in low-texture areas of the image.
+    High standard deviation in flat areas indicates sensor grain (Shot Noise
+    or Read Noise).
+    
+    ISO-Awareness:
+    Normalization factors are dynamic based on the ISO setting. High-ISO 
+    images are expected to have a higher noise floor, preventing "clean" 
+    night shots from being unfairly penalized.
+    
+    Ref: https://en.wikipedia.org/wiki/Signal-to-noise_ratio
+    """
     h, w = gray_img.shape
     grid_size = 8  # 8x8 grid of patches
     patch_h, patch_w = h // grid_size, w // grid_size
@@ -634,7 +714,21 @@ def _calculate_color_balance_legacy(img: np.ndarray) -> tuple[float, str]:
 
 
 def _calculate_dynamic_range(gray_img: np.ndarray, metadata: dict = None) -> tuple[float, str]:
-    """Calculates dynamic range using Shannon Entropy with camera-specific baseline adjustment."""
+    """
+    Assesses Dynamic Range (DR) using Tonal Entropy analysis.
+    
+    Science:
+    Uses Shannon Entropy to measure the "information density" of the tonal range.
+    A histogram spread across more "bins" with uniform distribution indicates 
+    higher DR, while a "collapsed" histogram (due to low contrast or clipping)
+    indicates lost data.
+    
+    Camera-Awareness:
+    Scores are normalized against the known DR capability of the camera model 
+    at the used ISO, sourced from DXOMARK and PhotonsToPhotos benchmarks.
+    
+    Ref: https://en.wikipedia.org/wiki/Entropy_(information_theory)
+    """
     hist = cv2.calcHist([gray_img], [0], None, [256], [0, 256])
     hist = hist.ravel() / (hist.sum() + 1e-6) # Normalize for entropy
     
@@ -917,12 +1011,27 @@ def write_xmp_sidecar(image_path: str, rating: int = 0, label: str = ""):
         logger.error(f"Failed to write XMP for {image_path}: {e}")
 
 
-def evaluate_photo_quality(image_path: str, requested_metrics: list[str] = None, enable_subject_detection: bool = True, model_size: str = "nano") -> dict:
+def evaluate_photo_quality(
+    image_path: str,
+    requested_metrics: list[str] = None,
+    enable_subject_detection: bool = True,
+    model_size: str = "nano"
+) -> dict:
     """
-    Main entry point for quality evaluation. 
-    Implements a context-aware composite scoring system.
-    Supports granular metric selection via requested_metrics.
-    'enable_subject_detection' can be set to False to completely disable YOLO-based subject detection and metrics.
+    Performs a comprehensive technical and aesthetic assessment of a photograph.
+    
+    This is the main entry point for the engine. It extracts EXIF metadata,
+    analyzes signal properties (Sharpness, Exposure, Noise, DR), and runs 
+    neural-network based subject/composition analysis to provide a 
+    weighted "Final Judgement."
+    
+    Returns:
+        dict: A structured report containing:
+            - overallConfidence: The final quality score (0.0 to 1.0)
+            - technicalScore: Physics-based execution quality
+            - aestheticScore: Composition and framing quality
+            - judgement: Human-readable label (e.g. 'Excellent')
+            - metrics: Detailed breakdown per evaluation category
     """
     all_metrics = {"sharpness", "focus", "exposure", "noise", "color", "dynamicRange", "composition"}
     if requested_metrics is None or "all" in requested_metrics:
