@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "photo_quality_analyzer_core"
-version = "0.4.0"
+version = "0.5.0"
 authors = [
   { name="Abhishek Prasad" },
 ]
@@ -32,6 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["unittest"]
+nas = ["super-gradients>=3.7.1"]
 
 [tool.setuptools]
 packages = ["photo_quality_analyzer_core"]

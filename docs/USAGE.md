@@ -153,3 +153,37 @@ Place a file at `~/.photo_quality_analyzer/camera_database.json`. The library wi
     }
 }
 ```
+
+## 7. YOLO-NAS Engine (v0.5.0+) - Advanced Users
+
+### What is YOLO-NAS?
+YOLO-NAS uses Neural Architecture Search for potentially better accuracy and speed on certain hardware configurations.
+
+### Why is this Optional?
+
+> **TL;DR**: The default YOLO engine (v8/v11) works great for 99% of users. YOLO-NAS is only beneficial for specific edge devices or research purposes.
+
+YOLO-NAS requires the `super-gradients` library (~500-800 MB with dependencies) which has several compatibility limitations:
+
+- **Outdated Dependencies**: Pins old versions of `onnxruntime`, `torchmetrics`, and other packages that conflict with modern ML environments
+- **Platform-Specific**: Installation fails on many systems due to architecture-specific builds (ARM Macs, newer Python versions, etc.)
+- **Limited Benefit**: For general photography analysis, the default YOLO models provide equivalent or better results
+
+**When to use YOLO-NAS:**
+- You're deploying to NVIDIA Jetson or specific edge hardware
+- You're already invested in Deci.ai's ecosystem
+- You're conducting model benchmarking research
+
+### Installation (If Supported)
+
+```bash
+pip install super-gradients
+```
+
+If installation fails with dependency errors, your platform is not compatible. Continue using the default `--engine yolo` (no flag needed).
+
+### Usage
+```bash
+# Only if super-gradients installed successfully
+photographi --engine yolo-nas --model_path yolo_nas_s.pt --folder_path ./photos
+```

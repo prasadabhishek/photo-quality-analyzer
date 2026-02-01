@@ -18,7 +18,7 @@ Sources:
 try:
     import cv2
     import numpy as np
-    from ultralytics import YOLO
+    from ultralytics import YOLO, NAS
     from tqdm import tqdm
     import exifread
     try:
@@ -138,7 +138,7 @@ JUDGEMENT_POOR = _cfg.get('JUDGEMENT_POOR', 0.3)
 
 COCO_NAMES_FILE_PATH_DEFAULT = "coco.names"
 RAW_EXTENSIONS = {'.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw'}
-SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3', '.rw2', '.nrw', '.gpr', '.sr2', '.pef', '.rwl')
+SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3', '.rw2', '.nrw', '.gpr', '.sr2', '.pef', '.rwl', '.tif', '.tiff')
 
 # --- Camera Capability Database (Phase 2) ---
 # Values are sourced from PhotonsToPhotos (https://www.photonstophotos.net/)
@@ -291,9 +291,10 @@ def detect_sensor_size(camera_model: str) -> str:
 # Global model variables for lazy loading
 g_yolo_model = None
 g_coco_names = None
+g_model_engine = "yolo" # 'yolo' or 'yolo-nas'
 
 
-def load_yolo_model_and_names(model_path: str, coco_names_file_path: str) -> tuple[YOLO | None, list[str] | None]:
+def load_yolo_model_and_names(model_path: str, coco_names_file_path: str, engine: str = "yolo") -> tuple[object | None, list[str] | None]:
     """
     Initializes the YOLO (You Only Look Once) neural network for subject detection.
     
@@ -322,9 +323,21 @@ def load_yolo_model_and_names(model_path: str, coco_names_file_path: str) -> tup
         # Ultralytics' YOLO() constructor will:
         # 1. Attempt to download if 'model_path' is a recognized model name (e.g., "yolov8n.pt").
         # 2. Attempt to load from disk if 'model_path' is a file path (e.g., "./yolo11n.pt").
-        loaded_model = YOLO(model_path)
-        logger.info(
-            f"Successfully loaded/initialized YOLO model using '{model_path}'.")
+        if engine == "yolo-nas":
+            try:
+                loaded_model = NAS(model_path)
+                logger.info(f"Successfully loaded YOLO-NAS model: {model_path}")
+            except (ImportError, ModuleNotFoundError) as e_nas:
+                logger.error(f"YOLO-NAS engine requires 'super-gradients' library.")
+                logger.error("Please run: pip install super-gradients")
+                raise ImportError("Missing dependency for YOLO-NAS.") from e_nas
+            except Exception as e:
+                logger.error(f"Failed to load YOLO-NAS model: {e}")
+                raise e
+        else:
+            loaded_model = YOLO(model_path)
+            logger.info(
+                f"Successfully loaded/initialized YOLO model using '{model_path}'.")
 
         # Try to get names from the model itself (logic remains the same)
 
@@ -376,7 +389,7 @@ def load_yolo_model_and_names(model_path: str, coco_names_file_path: str) -> tup
     return loaded_model, loaded_coco_names
 
 
-def ensure_yolo_initialized(model_size: str = "nano") -> None:
+def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> None:
     """
     Guarantees that the visual intelligence model is ready for processing.
     
@@ -399,7 +412,7 @@ def ensure_yolo_initialized(model_size: str = "nano") -> None:
         return True
         
     g_yolo_model, g_coco_names = load_yolo_model_and_names(
-        requested_model, COCO_NAMES_FILE_PATH_DEFAULT)
+        requested_model, COCO_NAMES_FILE_PATH_DEFAULT, engine=engine)
     return g_yolo_model is not None
 
 
@@ -1306,7 +1319,8 @@ def evaluate_photo_quality(
     image_path: str,
     requested_metrics: list[str] = None,
     enable_subject_detection: bool = True,
-    model_size: str = "nano"
+    model_size: str = "nano",
+    engine: str = "yolo"
 ) -> dict:
     """
     Performs a comprehensive technical and aesthetic assessment of a photograph.
@@ -1347,7 +1361,7 @@ def evaluate_photo_quality(
     detections = []
     
     if needs_yolo:
-        ensure_yolo_initialized(model_size=model_size)
+        ensure_yolo_initialized(model_size=model_size, engine=engine)
         if enable_subject_detection:
             # Run YOLO once for all metrics
             detections = _detect_objects(img)
@@ -1452,7 +1466,7 @@ def evaluate_photo_quality(
 
 # --- File Processing Function ---
 
-def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_metrics: list[str] = None) -> None:
+def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_metrics: list[str] = None, min_conf_threshold: float = None) -> None:
     """
     Orchestrates the batch processing of an image directory.
     
@@ -1464,7 +1478,12 @@ def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_
     This function is optimized for large-scale ingestion (1000+ photos), 
     using memory management best-practices for local execution.
     """
-    global g_yolo_model  # Ensure it uses the globally loaded model
+    global g_yolo_model, g_model_engine  # Ensure it uses the globally loaded model
+    
+    # Auto-initialize if not already loaded (e.g. library usage)
+    if g_yolo_model is None:
+        ensure_yolo_initialized(engine=g_model_engine)
+        
     if g_yolo_model is None:
         logger.critical(
             "YOLO model could not be loaded. Cannot proceed with image processing.")
@@ -1476,14 +1495,24 @@ def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_
     good_dir = os.path.join(folder_path, "good_photos")
     fair_dir = os.path.join(folder_path, "fair_photos")
     bad_dir = os.path.join(folder_path, "bad_photos")
+    
+    # Threshold mode dirs
+    selects_dir = os.path.join(folder_path, "selects")
+    rejects_dir = os.path.join(folder_path, "rejects")
 
     if move_files:
-        os.makedirs(good_dir, exist_ok=True)
-        os.makedirs(fair_dir, exist_ok=True)
-        os.makedirs(bad_dir, exist_ok=True)
-        logger.info(f"Good photos will be moved to: {good_dir}")
-        logger.info(f"Fair photos will be moved to: {fair_dir}")
-        logger.info(f"Bad photos (Poor/Very Poor) will be moved to: {bad_dir}")
+        if min_conf_threshold is not None:
+             os.makedirs(selects_dir, exist_ok=True)
+             os.makedirs(rejects_dir, exist_ok=True)
+             logger.info(f"Threshold Mode: Moving kept photos (>= {min_conf_threshold}) to: {selects_dir}")
+             logger.info(f"Threshold Mode: Moving rejected photos (< {min_conf_threshold}) to: {rejects_dir}")
+        else:
+             os.makedirs(good_dir, exist_ok=True)
+             os.makedirs(fair_dir, exist_ok=True)
+             os.makedirs(bad_dir, exist_ok=True)
+             logger.info(f"Judgement Mode: Good photos will be moved to: {good_dir}")
+             logger.info(f"Judgement Mode: Fair photos will be moved to: {fair_dir}")
+             logger.info(f"Judgement Mode: Bad photos (Poor/Very Poor) will be moved to: {bad_dir}")
 
     processed_count = 0
 
@@ -1502,7 +1531,7 @@ def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_
                     parent_dir_abs = os.path.abspath(
                         os.path.dirname(image_path))
                     # Check if the image's parent directory is one of the target output directories
-                    if parent_dir_abs in [os.path.abspath(d) for d in [good_dir, fair_dir, bad_dir]]:
+                    if parent_dir_abs in [os.path.abspath(d) for d in [good_dir, fair_dir, bad_dir, selects_dir, rejects_dir]]:
                         if verbose:
                             logger.debug(
                                 f"Skipping {filename} as it's already in a target move directory.")
@@ -1521,12 +1550,20 @@ def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_
 
                 if move_files:
                     destination_folder = ""
-                    if result['judgement'] in ["Excellent", "Good"]:
-                        destination_folder = good_dir
-                    elif result['judgement'] == "Fair":
-                        destination_folder = fair_dir
-                    else:  # Poor, Very Poor
-                        destination_folder = bad_dir
+                    if min_conf_threshold is not None:
+                        # Threshold Mode
+                        if result['overallConfidence'] >= min_conf_threshold:
+                            destination_folder = selects_dir
+                        else:
+                            destination_folder = rejects_dir
+                    else:
+                        # Standard Judgement Mode
+                        if result['judgement'] in ["Excellent", "Good"]:
+                            destination_folder = good_dir
+                        elif result['judgement'] == "Fair":
+                            destination_folder = fair_dir
+                        else:  # Poor, Very Poor
+                            destination_folder = bad_dir
 
                     destination_path = os.path.join(
                         destination_folder, filename)  # Ensure filename is used, not image_path
@@ -1557,6 +1594,9 @@ def main() -> None:
     - Triggers the directory processing pipeline.
     """
     global g_yolo_model, g_coco_names, YOLO_MODEL_PATH_DEFAULT, COCO_NAMES_FILE_PATH_DEFAULT
+    
+    # Simple fix for lazy loading args passing
+    global g_model_engine
 
     parser = argparse.ArgumentParser(
         description="Analyze photo quality in a folder using a YOLO model.")
@@ -1582,12 +1622,27 @@ def main() -> None:
         default=YOLO_MODEL_PATH_DEFAULT,
         help=f"Path to the YOLO model file (e.g., yolov11n.pt, yolov8n.pt). Default: {YOLO_MODEL_PATH_DEFAULT}"
     )
+    parser.add_argument(
+        "--min_conf",
+        type=float,
+        default=None,
+        help="Optional confidence threshold (0.0-1.0). If set with --move, uses 'selects/rejects' folders instead of 'good/fair/bad'."
+    )
+    parser.add_argument(
+        "--engine",
+        type=str,
+        choices=["yolo", "yolo-nas"],
+        default="yolo",
+        help="Inference engine to use. 'yolo' for Ultralytics YOLO, 'yolo-nas' for Ultralytics NAS."
+    )
     args = parser.parse_args()
+
+    g_model_engine = args.engine
 
     # Load model based on default or user-provided path
     model_to_load = args.model_path
     g_yolo_model, g_coco_names = load_yolo_model_and_names(
-        model_to_load, COCO_NAMES_FILE_PATH_DEFAULT)
+        model_to_load, COCO_NAMES_FILE_PATH_DEFAULT, engine=args.engine)
 
     # Validate folder path
     if not os.path.exists(args.folder_path):
@@ -1598,7 +1653,7 @@ def main() -> None:
         exit(1)
 
     # Start processing
-    process_folder(args.folder_path, args.verbose, args.move)
+    process_folder(args.folder_path, args.verbose, args.move, min_conf_threshold=args.min_conf)
 
 
 if __name__ == "__main__":
