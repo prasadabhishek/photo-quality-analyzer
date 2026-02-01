@@ -1,0 +1,1114 @@
+{
+    "Sony": {
+        "A1": {
+            "dr": 14.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-1",
+                "Sony A1"
+            ]
+        },
+        "A9 III": {
+            "dr": 13.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-9M3",
+                "Sony A9 III"
+            ]
+        },
+        "A9 II": {
+            "dr": 14.0,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-9M2",
+                "Sony A9 II"
+            ]
+        },
+        "A9": {
+            "dr": 14.0,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-9",
+                "Sony A9"
+            ]
+        },
+        "A7R V": {
+            "dr": 14.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7RM5",
+                "Sony A7R V"
+            ]
+        },
+        "A7R IV": {
+            "dr": 14.7,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7RM4",
+                "ILCE-7RM4A",
+                "Sony A7R IV"
+            ]
+        },
+        "A7R III": {
+            "dr": 14.7,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7RM3",
+                "Sony A7R III"
+            ]
+        },
+        "A7R II": {
+            "dr": 14.7,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7RM2",
+                "Sony A7R II"
+            ]
+        },
+        "A7R": {
+            "dr": 14.2,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7R",
+                "Sony A7R"
+            ]
+        },
+        "A7 IV": {
+            "dr": 14.2,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7M4",
+                "Sony A7 IV"
+            ]
+        },
+        "A7 III": {
+            "dr": 14.0,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7M3",
+                "Sony A7 III"
+            ]
+        },
+        "A7 II": {
+            "dr": 13.6,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7M2",
+                "Sony A7 II"
+            ]
+        },
+        "A7": {
+            "dr": 13.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7",
+                "Sony A7"
+            ]
+        },
+        "A7S III": {
+            "dr": 13.9,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7SM3",
+                "Sony A7S III"
+            ]
+        },
+        "A7S II": {
+            "dr": 12.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7SM2",
+                "Sony A7S II"
+            ]
+        },
+        "A7S": {
+            "dr": 12.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7S",
+                "Sony A7S"
+            ]
+        },
+        "A7C II": {
+            "dr": 14.1,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7CM2",
+                "Sony A7C II"
+            ]
+        },
+        "A7C": {
+            "dr": 14.0,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7C",
+                "Sony A7C"
+            ]
+        },
+        "A7CR": {
+            "dr": 14.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ILCE-7CR",
+                "Sony A7CR"
+            ]
+        },
+        "A6700": {
+            "dr": 13.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-6700",
+                "Sony A6700"
+            ]
+        },
+        "A6600": {
+            "dr": 13.4,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-6600",
+                "Sony A6600"
+            ]
+        },
+        "A6500": {
+            "dr": 13.4,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-6500",
+                "Sony A6500"
+            ]
+        },
+        "A6400": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-6400",
+                "Sony A6400"
+            ]
+        },
+        "A6300": {
+            "dr": 13.4,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-6300",
+                "Sony A6300"
+            ]
+        },
+        "A6100": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-6100",
+                "Sony A6100"
+            ]
+        },
+        "A6000": {
+            "dr": 12.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-6000",
+                "Sony A6000"
+            ]
+        },
+        "A5100": {
+            "dr": 12.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-5100",
+                "Sony A5100"
+            ]
+        },
+        "A5000": {
+            "dr": 12.3,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ILCE-5000",
+                "Sony A5000"
+            ]
+        },
+        "NEX-7": {
+            "dr": 12.3,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NEX-7"
+            ]
+        },
+        "NEX-6": {
+            "dr": 12.1,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NEX-6"
+            ]
+        },
+        "NEX-5N": {
+            "dr": 12.1,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NEX-5N"
+            ]
+        },
+        "RX100 VII": {
+            "dr": 11.2,
+            "sensor_size": "one_inch",
+            "aliases": [
+                "DSC-RX100M7"
+            ]
+        },
+        "RX100 VI": {
+            "dr": 11.0,
+            "sensor_size": "one_inch",
+            "aliases": [
+                "DSC-RX100M6"
+            ]
+        },
+        "RX100 V": {
+            "dr": 11.0,
+            "sensor_size": "one_inch",
+            "aliases": [
+                "DSC-RX100M5",
+                "DSC-RX100M5A"
+            ]
+        },
+        "RX1R II": {
+            "dr": 14.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "DSC-RX1RM2",
+                "Sony RX1R II"
+            ]
+        },
+        "ZV-E1": {
+            "dr": 13.9,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "ZV-E1"
+            ]
+        },
+        "ZV-E10": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "ZV-E10"
+            ]
+        }
+    },
+    "Nikon": {
+        "Z9": {
+            "dr": 14.6,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z 9",
+                "Z 9"
+            ]
+        },
+        "Z8": {
+            "dr": 14.6,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z 8",
+                "Z 8"
+            ]
+        },
+        "Z7 II": {
+            "dr": 14.7,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z 7_2",
+                "Z 7 II"
+            ]
+        },
+        "Z7": {
+            "dr": 14.6,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z 7"
+            ]
+        },
+        "Z6 III": {
+            "dr": 14.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z 6III"
+            ]
+        },
+        "Z6 II": {
+            "dr": 14.2,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z 6_2",
+                "Z 6 II"
+            ]
+        },
+        "Z6": {
+            "dr": 14.1,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z 6"
+            ]
+        },
+        "Z5": {
+            "dr": 13.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z 5"
+            ]
+        },
+        "Zf": {
+            "dr": 14.2,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON Z f",
+                "Zf"
+            ]
+        },
+        "Z50": {
+            "dr": 13.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON Z 50"
+            ]
+        },
+        "Zfc": {
+            "dr": 13.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON Z fc",
+                "Zfc"
+            ]
+        },
+        "Z30": {
+            "dr": 13.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON Z 30"
+            ]
+        },
+        "D850": {
+            "dr": 14.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D850"
+            ]
+        },
+        "D810": {
+            "dr": 14.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D810"
+            ]
+        },
+        "D800": {
+            "dr": 14.4,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D800",
+                "NIKON D800E"
+            ]
+        },
+        "D780": {
+            "dr": 14.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D780"
+            ]
+        },
+        "D750": {
+            "dr": 14.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D750"
+            ]
+        },
+        "D700": {
+            "dr": 12.1,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D700"
+            ]
+        },
+        "D610": {
+            "dr": 14.4,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D610",
+                "NIKON D600"
+            ]
+        },
+        "D500": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON D500"
+            ]
+        },
+        "D7500": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON D7500"
+            ]
+        },
+        "D7200": {
+            "dr": 13.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON D7200"
+            ]
+        },
+        "D7100": {
+            "dr": 12.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON D7100"
+            ]
+        },
+        "D7000": {
+            "dr": 12.9,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON D7000"
+            ]
+        },
+        "D5600": {
+            "dr": 13.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON D5600",
+                "NIKON D5500"
+            ]
+        },
+        "D5300": {
+            "dr": 13.1,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON D5300",
+                "NIKON D5200"
+            ]
+        },
+        "D3500": {
+            "dr": 13.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "NIKON D3500",
+                "NIKON D3400",
+                "NIKON D3300"
+            ]
+        },
+        "D5": {
+            "dr": 12.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D5"
+            ]
+        },
+        "D6": {
+            "dr": 12.6,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D6"
+            ]
+        },
+        "D4S": {
+            "dr": 12.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D4S",
+                "NIKON D4"
+            ]
+        },
+        "D3S": {
+            "dr": 12.0,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "NIKON D3S",
+                "NIKON D3"
+            ]
+        }
+    },
+    "Canon": {
+        "EOS R1": {
+            "dr": 14.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS R1"
+            ]
+        },
+        "EOS R3": {
+            "dr": 14.4,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS R3"
+            ]
+        },
+        "EOS R5 II": {
+            "dr": 14.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS R5 Mark II"
+            ]
+        },
+        "EOS R5": {
+            "dr": 14.0,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS R5"
+            ]
+        },
+        "EOS R6 II": {
+            "dr": 14.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS R6 Mark II"
+            ]
+        },
+        "EOS R6": {
+            "dr": 13.9,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS R6"
+            ]
+        },
+        "EOS R8": {
+            "dr": 14.3,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS R8"
+            ]
+        },
+        "EOS R": {
+            "dr": 13.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS R"
+            ]
+        },
+        "EOS RP": {
+            "dr": 11.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS RP"
+            ]
+        },
+        "EOS R7": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS R7"
+            ]
+        },
+        "EOS R10": {
+            "dr": 12.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS R10"
+            ]
+        },
+        "EOS R50": {
+            "dr": 12.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS R50"
+            ]
+        },
+        "EOS 5D IV": {
+            "dr": 13.6,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS 5D Mark IV"
+            ]
+        },
+        "EOS 5D III": {
+            "dr": 11.7,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS 5D Mark III"
+            ]
+        },
+        "EOS 5D II": {
+            "dr": 11.0,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS 5D Mark II"
+            ]
+        },
+        "EOS 6D II": {
+            "dr": 12.0,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS 6D Mark II"
+            ]
+        },
+        "EOS 6D": {
+            "dr": 11.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS 6D"
+            ]
+        },
+        "EOS 90D": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS 90D"
+            ]
+        },
+        "EOS 80D": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS 80D"
+            ]
+        },
+        "EOS 70D": {
+            "dr": 11.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS 70D"
+            ]
+        },
+        "EOS 7D II": {
+            "dr": 11.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS 7D Mark II"
+            ]
+        },
+        "EOS 7D": {
+            "dr": 11.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS 7D"
+            ]
+        },
+        "EOS-1D X III": {
+            "dr": 14.1,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS-1D X Mark III"
+            ]
+        },
+        "EOS-1D X II": {
+            "dr": 13.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Canon EOS-1D X Mark II"
+            ]
+        },
+        "EOS M50 II": {
+            "dr": 11.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS M50 Mark II",
+                "Canon EOS M50"
+            ]
+        },
+        "EOS M6 II": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS M6 Mark II"
+            ]
+        },
+        "EOS Rebel T7i": {
+            "dr": 12.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS 800D",
+                "Canon EOS Rebel T7i"
+            ]
+        },
+        "EOS Rebel T6i": {
+            "dr": 12.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "Canon EOS 750D",
+                "Canon EOS Rebel T6i"
+            ]
+        }
+    },
+    "Fujifilm": {
+        "GFX 100 II": {
+            "dr": 15.1,
+            "sensor_size": "medium_format",
+            "aliases": [
+                "GFX100II"
+            ]
+        },
+        "GFX 100S": {
+            "dr": 14.9,
+            "sensor_size": "medium_format",
+            "aliases": [
+                "GFX100S"
+            ]
+        },
+        "GFX 50S II": {
+            "dr": 14.5,
+            "sensor_size": "medium_format",
+            "aliases": [
+                "GFX50SII"
+            ]
+        },
+        "GFX 50R": {
+            "dr": 14.4,
+            "sensor_size": "medium_format",
+            "aliases": [
+                "GFX50R"
+            ]
+        },
+        "X-T5": {
+            "dr": 13.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-T5"
+            ]
+        },
+        "X-T4": {
+            "dr": 13.2,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-T4"
+            ]
+        },
+        "X-T3": {
+            "dr": 13.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-T3"
+            ]
+        },
+        "X-T2": {
+            "dr": 12.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-T2"
+            ]
+        },
+        "X-H2S": {
+            "dr": 13.4,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-H2S"
+            ]
+        },
+        "X-H2": {
+            "dr": 13.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-H2"
+            ]
+        },
+        "X-Pro3": {
+            "dr": 13.1,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-Pro3"
+            ]
+        },
+        "X-Pro2": {
+            "dr": 12.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-Pro2"
+            ]
+        },
+        "X-S20": {
+            "dr": 13.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-S20"
+            ]
+        },
+        "X-S10": {
+            "dr": 13.1,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-S10"
+            ]
+        },
+        "X-E4": {
+            "dr": 13.1,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-E4"
+            ]
+        },
+        "X-E3": {
+            "dr": 12.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-E3"
+            ]
+        },
+        "X-T30 II": {
+            "dr": 13.1,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-T30II",
+                "X-T30 II"
+            ]
+        },
+        "X-T20": {
+            "dr": 12.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X-T20"
+            ]
+        },
+        "X100VI": {
+            "dr": 13.5,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X100VI"
+            ]
+        },
+        "X100V": {
+            "dr": 13.0,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X100V"
+            ]
+        },
+        "X100F": {
+            "dr": 12.8,
+            "sensor_size": "aps_c",
+            "aliases": [
+                "X100F"
+            ]
+        }
+    },
+    "Panasonic": {
+        "S1R": {
+            "dr": 14.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "DC-S1R"
+            ]
+        },
+        "S1": {
+            "dr": 14.1,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "DC-S1"
+            ]
+        },
+        "S5 II": {
+            "dr": 14.2,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "DC-S5M2",
+                "DC-S5M2X"
+            ]
+        },
+        "S5": {
+            "dr": 14.1,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "DC-S5"
+            ]
+        },
+        "GH6": {
+            "dr": 12.8,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-GH6"
+            ]
+        },
+        "GH5 II": {
+            "dr": 12.4,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-GH5M2"
+            ]
+        },
+        "GH5": {
+            "dr": 12.3,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-GH5"
+            ]
+        },
+        "GH4": {
+            "dr": 11.5,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-GH4"
+            ]
+        },
+        "G9 II": {
+            "dr": 13.1,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-G9M2"
+            ]
+        },
+        "G9": {
+            "dr": 12.3,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-G9"
+            ]
+        },
+        "GX9": {
+            "dr": 12.3,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-GX9"
+            ]
+        },
+        "GX85": {
+            "dr": 11.5,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-GX85",
+                "DC-GX80"
+            ]
+        },
+        "GX8": {
+            "dr": 11.8,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "DC-GX8"
+            ]
+        }
+    },
+    "Olympus": {
+        "OM-1 II": {
+            "dr": 13.0,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "OM-1 Mark II"
+            ]
+        },
+        "OM-1": {
+            "dr": 12.8,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "OM-1"
+            ]
+        },
+        "E-M1 III": {
+            "dr": 12.5,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "E-M1MarkIII"
+            ]
+        },
+        "E-M1 II": {
+            "dr": 12.3,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "E-M1MarkII"
+            ]
+        },
+        "E-M1X": {
+            "dr": 12.4,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "E-M1X"
+            ]
+        },
+        "E-M5 III": {
+            "dr": 12.3,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "E-M5MarkIII"
+            ]
+        },
+        "E-M5 II": {
+            "dr": 11.5,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "E-M5MarkII"
+            ]
+        },
+        "E-M10 IV": {
+            "dr": 12.1,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "E-M10MarkIV"
+            ]
+        },
+        "E-M10 III": {
+            "dr": 11.0,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "E-M10MarkIII"
+            ]
+        },
+        "PEN-F": {
+            "dr": 11.8,
+            "sensor_size": "micro_four_thirds",
+            "aliases": [
+                "PEN-F"
+            ]
+        }
+    },
+    "Leica": {
+        "M11": {
+            "dr": 14.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Leica M11"
+            ]
+        },
+        "M10": {
+            "dr": 13.2,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Leica M10"
+            ]
+        },
+        "Q3": {
+            "dr": 14.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Leica Q3"
+            ]
+        },
+        "Q2": {
+            "dr": 13.5,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Leica Q2"
+            ]
+        },
+        "SL3": {
+            "dr": 14.6,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Leica SL3"
+            ]
+        },
+        "SL2": {
+            "dr": 14.2,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Leica SL2"
+            ]
+        },
+        "SL": {
+            "dr": 12.8,
+            "sensor_size": "full_frame",
+            "aliases": [
+                "Leica SL"
+            ]
+        }
+    },
+    "General": {
+        "Full Frame Default": {
+            "dr": 13.0,
+            "sensor_size": "full_frame"
+        },
+        "APS-C Default": {
+            "dr": 12.0,
+            "sensor_size": "aps_c"
+        },
+        "M43 Default": {
+            "dr": 11.5,
+            "sensor_size": "micro_four_thirds"
+        },
+        "One Inch Default": {
+            "dr": 11.0,
+            "sensor_size": "one_inch"
+        }
+    }
+}

@@ -125,43 +125,55 @@ RAW_EXTENSIONS = {'.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw'}
 SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3', '.rw2', '.nrw', '.gpr', '.sr2', '.pef', '.rwl')
 
 # --- Camera Capability Database (Phase 2) ---
-# Dynamic Range capabilities by camera model (in stops).
-# Values are sourced from PhotonsToPhotos (https://www.photonstophotos.net/) 
+# Values are sourced from PhotonsToPhotos (https://www.photonstophotos.net/)
 # and DXOMARK (https://www.dxomark.com/) based on base ISO measurements.
-CAMERA_DYNAMIC_RANGE = {
-    # High-DR cameras (14+ stops)
-    'Sony A7R V': 14.8,
-    'Sony A7R IV': 14.7,
-    'Sony A7R III': 14.7,
-    'Nikon Z9': 14.5,
-    'Nikon Z8': 14.5,
-    'Canon EOS R5': 14.0,
-    'Canon EOS R3': 14.2,
+
+def load_camera_database() -> dict:
+    """Loads the camera capability database from the bundled JSON file."""
+    data_path = os.path.join(PACKAGE_DIR, 'data', 'camera_database.json')
+    if not os.path.exists(data_path):
+        logger.warning(f"Camera database not found at {data_path}. Using minimal fallbacks.")
+        return {}
+    try:
+        import json
+        with open(data_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading camera database: {e}")
+        return {}
+
+# Lazy load the database
+_CAMERA_DB = None
+
+def get_camera_data(camera_model: str) -> dict | None:
+    """
+    Search for camera specifications using model name or known aliases.
+    Returns: {dr: float, sensor_size: str} or None
+    """
+    global _CAMERA_DB
+    if _CAMERA_DB is None:
+        _CAMERA_DB = load_camera_database()
     
-    # Mid-range (12-14 stops)
-    'Sony A7 IV': 13.0,
-    'Sony A7 III': 13.0,
-    'Sony A7S III': 13.0,
-    'Fujifilm X-T5': 13.0,
-    'Fujifilm X-H2S': 13.0,
-    'Canon EOS R6': 12.5,
-    'Canon EOS R': 12.5,
-    'Nikon Z6 II': 12.7,
+    if not camera_model:
+        return None
+        
+    model_upper = camera_model.upper()
     
-    # Entry-level (10-12 stops)
-    'Canon EOS M50': 11.5,
-    'Canon EOS M200': 11.0,
-    'Sony A6400': 12.0,
-    'Sony A6100': 11.8,
-    'Fujifilm X-T30': 12.0,
-    
-    # Compact cameras (9-11 stops)
-    'Sony RX100 VII': 11.0,
-    'Sony RX100M7': 11.0,
-    'Sony RX100 VI': 10.5,
-    'Fujifilm X100V': 12.0,
-    'Canon G7 X Mark III': 10.5,
-}
+    # Iterate through brands and models
+    for brand, models in _CAMERA_DB.items():
+        if brand == "General": continue
+        for model_name, specs in models.items():
+            # Check direct match
+            if model_name.upper() in model_upper:
+                return specs
+            # Check aliases
+            for alias in specs.get('aliases', []):
+                if alias.upper() in model_upper:
+                    return specs
+    return None
+
+# Placeholder for backward compatibility if needed, though we'll update callsites
+CAMERA_DYNAMIC_RANGE = {} 
 
 # Sensor sizes and corresponding optical limits.
 # diffraction_limit: The aperture where the Airy Disk size exceeds the pixel pitch.
@@ -181,12 +193,16 @@ def detect_sensor_size(camera_model: str) -> str:
     Maps models to their corresponding sensor format to allow for physics-aware
     adjustments (e.g., diffraction limits).
     """
+    specs = get_camera_data(camera_model)
+    if specs and 'sensor_size' in specs:
+        return specs['sensor_size']
+        
     if not camera_model:
-        return 'full_frame'  # Default assumption
+        return 'full_frame'
     
     model_upper = camera_model.upper()
     
-    # Full frame indicators
+    # Fallback heuristics for models not in DB
     if any(x in model_upper for x in ['A7', 'A9', 'Z9', 'Z8', 'Z6', 'Z7', 'EOS R5', 'EOS R6', 'EOS R3', '1DX', '5D', '6D']):
         return 'full_frame'
     
@@ -742,14 +758,14 @@ def _calculate_dynamic_range(gray_img: np.ndarray, metadata: dict = None) -> tup
     iso = metadata.get("iso") if metadata else None
     
     if camera_model or iso:
-        expected_dr = get_camera_dynamic_range_baseline(camera_model, iso, CAMERA_DYNAMIC_RANGE)
+        specs = get_camera_data(camera_model)
+        base_dr = specs.get('dr', 12.0) if specs else 12.0
+        expected_dr = get_camera_dynamic_range_baseline(base_dr, iso)
+        
         # Normalize score to camera capability
-        # If camera has 14 stops and we're using 12, that's 12/14 = 0.86 of potential
-        # Adjust the raw score based on how we're utilizing the camera's capability
         baseline_dr = 12.0  # Standard reference
         if expected_dr > 0:
             capability_factor = baseline_dr / expected_dr
-            # Don't penalize good cameras too much, just adjust slightly
             score = min(raw_score * (0.8 + 0.2 * capability_factor), 1.0)
         else:
             score = raw_score

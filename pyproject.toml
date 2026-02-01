@@ -35,3 +35,6 @@ test = ["unittest"]
 
 [tool.setuptools]
 packages = ["photo_quality_analyzer_core"]
+
+[tool.setuptools.package-data]
+"photo_quality_analyzer_core.data" = ["*.json"]

@@ -61,31 +61,26 @@ def adjust_sharpness_for_aperture(raw_score: float, aperture: float, sensor_size
     return float(adjusted), context
 
 
-def get_camera_dynamic_range_baseline(camera_model: str, iso: int, camera_dr_db: dict) -> float:
+def get_camera_dynamic_range_baseline(base_dr: float, iso: int) -> float:
     """
-    Returns the expected Dynamic Range (DR) in stops for a given camera and ISO.
+    Returns the expected effective Dynamic Range (DR) in stops for a given base DR and ISO.
     
     Science:
     Dynamic Range typically peaks at the base ISO (usually ISO 100) and drops
     by approximately 0.5 to 1.0 stops for every 1-stop increase in ISO. 
-    This function uses a baseline from industry benchmarks (DXOMARK) and
-    calculates the expected effective DR for the specific shooting conditions.
+    This function calculates the expected effective DR for specific shooting conditions.
     
     Ref: https://www.photonstophotos.net/Charts/PDR.htm
     """
-    baseline_dr = 12.0
-    
-    if camera_model:
-        for camera_name, dr in camera_dr_db.items():
-            if camera_name in camera_model:
-                baseline_dr = dr
-                break
+    if not base_dr:
+        base_dr = 12.0 # Default fallback
     
     if iso and iso > 100:
+        # PDR drops approx 0.5 stops per ISO stop increase
         iso_stops_above_base = np.log2(iso / 100)
-        effective_dr = baseline_dr - iso_stops_above_base * 0.5
+        effective_dr = base_dr - iso_stops_above_base * 0.5
     else:
-        effective_dr = baseline_dr
+        effective_dr = base_dr
     
     return max(effective_dr, 8.0)
 
