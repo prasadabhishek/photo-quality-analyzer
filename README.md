@@ -2,9 +2,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI version](https://badge.fury.io/py/photo-quality-analyzer-core.svg)](https://pypi.org/project/photo-quality-analyzer-core/)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-**The Physics & Neural Engine behind [`photographi`](../photographi).**
+**The Physics & Neural Engine behind [`photographi`](https://github.com/prasadabhishek/photo-quality-analyzer).**
 
 `photo-quality-analyzer` is a local-first Computer Vision SDK designed to programmatically assess image quality. It bridges the gap between raw pixel data and human aesthetic perception using a hybrid approach of **Signal Processing** (physics) and **Neural Networks** (context).
 
@@ -23,14 +24,25 @@
 
 ## 📦 Installation
 
+Primary installation is via PyPI:
+
 ```bash
-# Install from source (for now)
-git clone https://github.com/yourusername/photo-quality-analyzer.git
+pip install photo-quality-analyzer-core
+```
+
+To include RAW support (requires `LibRaw` dependencies):
+
+```bash
+pip install "photo-quality-analyzer-core[raw]"
+```
+
+Alternatively, install from source:
+
+```bash
+git clone https://github.com/prasadabhishek/photo-quality-analyzer.git
 cd photo-quality-analyzer
 pip install -e .
 ```
-
-*Note: Requires `opencv-python`, `numpy`, `scipy`, `rawpy`, and `ultralytics`.*
 
 ---
 
@@ -50,8 +62,8 @@ print(f"Judgement: {result['judgement']}")  # e.g., "Sharp & Well-Exposed"
 
 # Access granular metrics
 metrics = result['metrics']
-print(f"Sharpness: {metrics['sharpness_score']}")
-print(f"Main Subject: {result.get('main_subject_name', 'None')}")
+print(f"Sharpness: {metrics['sharpness']['score']}")
+print(f"Description: {result['description']}")
 ```
 
 ### 2. Low-Level Signal Processing
@@ -68,7 +80,7 @@ sharpness, explanation = _calculate_sharpness(img)
 print(f"FFT Sharpness: {sharpness:.4f} ({explanation})")
 
 # Check Ansel Adams zones
-exposure, zone_data = _calculate_exposure(img)
+exposure, explanation = _calculate_exposure(img)
 print(f"Exposure Score: {exposure}")
 ```
 
@@ -103,7 +115,7 @@ We welcome contributions! Please see `tests/` for the standalone unit test suite
 
 ```bash
 # Run the library-specific test suite
-python3 -m unittest discover tests
+PYTHONPATH=. python3 -m unittest discover tests
 ```
 
 ---
