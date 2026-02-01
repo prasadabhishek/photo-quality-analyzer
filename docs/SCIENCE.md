@@ -37,6 +37,8 @@ Standard sharpness checks (like Laplacian Variance) are easily fooled by noise o
 - We analyze the **Anisotropy Ratio** (Directionality) of the High-Frequency (HF) spectrum using 2nd-order Central Moments.
 - **Aperture-Awareness**: The engine fetches the camera's sensor size and aperture. It calculates the **Airy Disk** diameter ($D = 2.44 \cdot \lambda \cdot N$). If the aperture ($N$) is beyond the **Diffraction Limited Aperture (DLA)** of the sensor, the sharpness score is normalized to reflect the physical limits of the glass, rather than user error.
 
+**ELI5**: Imagine looking through a screen door. If the holes are big, you see clearly. If you try to make the holes tiny (closing the aperture too much), the light starts to "bend" around the wires and gets blurry. We check your camera settings to see if the blur is your fault or just the way light works!
+
 ### B. Exposure: Ansel Adams Zone System
 The engine moves beyond simple "mean brightness" by applying the **Zone System** developed by Ansel Adams.
 
@@ -48,6 +50,8 @@ The engine moves beyond simple "mean brightness" by applying the **Zone System**
 - **Metric**: The score calculates the deviance from Zone V while applying heavy nonlinear penalties for clipping in Zone 0 or X.
 - **Shutter-Awareness**: At fast shutter speeds (action shots), the engine grants higher tolerance for highlight clipping to favor frozen motion.
 
+**ELI5**: We look at a photo like a coloring book. If you press too hard and turn a spot pure white (blown highlights) or pure black (crushed shadows), you lose the drawing! We try to make sure most of your "coloring" is in the middle where we can see the details.
+
 ### C. Noise: ISO-Adaptive Variance Sampling
 Noise is estimated by sampling statistical variance in low-texture regions of the frame.
 
@@ -57,6 +61,8 @@ Noise is estimated by sampling statistical variance in low-texture regions of th
 - We identify the 5 "smoothest" patches (lowest variance) to isolate the sensor's **Noise Floor** from actual image detail.
 - **Normalization**: The noise score is dynamically scaled based on the **ISO setting**. A clean image at ISO 12,800 is rated significantly higher than an equally clean image at ISO 100.
 
+**ELI5**: Imagine listening to music. "Noise" is like the static you hear when you turn the volume up too high. If you're in a very quiet room (Low ISO), we expect no static. If you're at a loud concert (High ISO), we're okay with a little static because it’s harder to hear perfectly there.
+
 ### D. Dynamic Range: Tonal Entropy
 Dynamic Range is measured via **Shannon Entropy**, which treats the tonal distribution as an information channel.
 
@@ -64,6 +70,8 @@ Dynamic Range is measured via **Shannon Entropy**, which treats the tonal distri
 - **Formula**: $H = -\sum P(x) \log_2 P(x)$
 - Max entropy ($H=8.0$) represents a perfectly distributed 8-bit tonal range.
 - **Benchmarking**: The result is normalized against our internal database of **Photons-to-Photos PDR** curves, ensuring a smartphone isn't unfairly compared to a Medium Format sensor.
+
+**ELI5**: Think of a box of 256 crayons. If your photo only uses 5 shades of gray, it’s a "flat" photo. If it uses almost all 256 colors from the brightest light to the darkest shadow, it has "high dynamic range." We count how many "crayons" you actually used!
 
 ---
 
@@ -74,6 +82,8 @@ The engine uses a neural network to understand *what* is in the frame. This is c
 
 1.  **ROI Masking**: Instead of grading global sharpness, the engine prioritizes the bounding box of the main subject (e.g., a person or animal).
 2.  **Intent Check**: If the subject is sharp but the background has "bokeh" (intentional blur), the engine rewards the photo for technical mastery rather than penalizing it for background softness.
+
+**ELI5**: If you take a picture of a dog, we make sure the *dog* is sharp. We don't care if the trees behind him are blurry—in fact, that usually looks better! We're smart enough to know what you were trying to photograph.
 
 ### Composition: Rule of Thirds
 The engine calculates the Euclidean distance between the centroids of detected subjects and the four "Power Points" of the Rule of Thirds grid. 
