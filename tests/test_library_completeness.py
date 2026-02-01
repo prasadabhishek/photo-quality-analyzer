@@ -90,13 +90,13 @@ class TestLibraryCompleteness(unittest.TestCase):
         """Verify composition scoring for subject placement."""
         # Mock detection at a power point (1/3, 1/3)
         # Image is 300x300, power point is (100, 100)
-        detections = [[95, 95, 105, 105]] 
+        detections = [{'box': [95, 95, 105, 105], 'name': 'test_object'}] 
         score, expl = _calculate_composition((300, 300, 3), detections)
         self.assertGreater(score, 0.7)
-        self.assertIn("Rule of Thirds", expl)
+        self.assertIn("Strong composition", expl)
 
         # Centered detection
-        detections_center = [[145, 145, 155, 155]]
+        detections_center = [{'box': [145, 145, 155, 155], 'name': 'test_object'}]
         score_c, expl_c = _calculate_composition((300, 300, 3), detections_center)
         self.assertLess(score_c, score)
 

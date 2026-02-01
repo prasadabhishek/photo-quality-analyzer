@@ -28,37 +28,27 @@ def adjust_sharpness_for_aperture(raw_score: float, aperture: float, sensor_size
     if aperture < 2.0:
         # Wide open: expect some edge softness  
         expected_min, expected_max = 0.6, 0.85
-        context = f"Wide aperture (f/{aperture:.1f}): edge softness is normal"
+        context = f"Wide aperture (f/{aperture:.1f})"
     elif aperture <= 8.0:
         # Sweet spot: expect excellent sharpness
         expected_min, expected_max = 0.8, 1.0
-        context = f"Optimal aperture (f/{aperture:.1f})"
+        context = ""
     elif aperture <= diffraction_limit:
         # Approaching diffraction: slight softness acceptable
         expected_min, expected_max = 0.7, 0.95
-        context = f"Good aperture (f/{aperture:.1f})"
+        context = f"f/{aperture:.1f}"
     else:
-        # Diffraction-limited: softness is physics, not a defect
-        beyond_factor = (aperture - diffraction_limit) / 10.0
-        softness_penalty = min(beyond_factor * 0.15, 0.3)
-        expected_min = max(0.5 - softness_penalty, 0.3)
-        expected_max = max(0.8 - softness_penalty, 0.6)
-        context = f"Diffraction-limited (f/{aperture:.1f}): softness expected"
+        # Diffraction-limited: physics causes softness
+        # We do NOT boost the score anymore. We reported honesty.
+        # But we flag it so the user knows WHY it is soft.
+        context = f"Warning: Diffraction Limit Reached (f/{aperture:.1f})"
+        return float(raw_score), context
     
-    # Normalize score to expected range
-    if raw_score < expected_min:
-        adjusted = raw_score / expected_min * 0.5
-    elif raw_score > expected_max:
-        adjusted = 1.0
-    else:
-        range_width = expected_max - expected_min
-        if range_width > 0:
-            range_position = (raw_score - expected_min) / range_width
-            adjusted = 0.5 + (range_position * 0.5)
-        else:
-            adjusted = 0.75
+    # For non-diffraction cases (wide open), we can still provide context
+    # if the score is low but expected for that aperture (e.g. f/1.2 softness)
+    # But for now, we return raw score primarily.
     
-    return float(adjusted), context
+    return float(raw_score), context
 
 
 def get_camera_dynamic_range_baseline(base_dr: float, iso: int) -> float:

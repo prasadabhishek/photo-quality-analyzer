@@ -44,11 +44,14 @@ class TestCoreMetrics(unittest.TestCase):
 
     def test_noise_detection(self):
         """Verify that noisy images get lower noise scores (inverse relationship)."""
-        img_noise = cv2.imread(self.noise_path, cv2.IMREAD_GRAYSCALE)
-        img_sharp = cv2.imread(self.sharp_path, cv2.IMREAD_GRAYSCALE)
+        img_noise_gray = cv2.imread(self.noise_path, cv2.IMREAD_GRAYSCALE)
+        img_noise_color = cv2.imread(self.noise_path, cv2.IMREAD_COLOR)
         
-        score_noise_img, _ = _calculate_noise(img_noise)
-        score_sharp_img, _ = _calculate_noise(img_sharp)
+        img_sharp_gray = cv2.imread(self.sharp_path, cv2.IMREAD_GRAYSCALE)
+        img_sharp_color = cv2.imread(self.sharp_path, cv2.IMREAD_COLOR)
+        
+        score_noise_img, _ = _calculate_noise(img_noise_color, img_noise_gray)
+        score_sharp_img, _ = _calculate_noise(img_sharp_color, img_sharp_gray)
         
         print(f"Noise Score - Noisy: {score_noise_img:.4f}, Clean: {score_sharp_img:.4f}")
         self.assertLess(score_noise_img, score_sharp_img)

@@ -128,3 +128,28 @@ result = evaluate_photo_quality(image)
 # This creates 'landscape.xmp' with a Star Rating based on quality
 create_xmp_sidecar(image, result['judgement'], result['overallConfidence'])
 ```
+
+## 6. Customizing Camera Database (v0.4.0+)
+If your camera is not in the bundled database, you can provide your own specifications without waiting for an update.
+
+### A. Environment Variable
+Point to a JSON file containing your camera data:
+```bash
+export PQA_CAMERA_DB_PATH="/path/to/my_cameras.json"
+```
+
+### B. User Config
+Place a file at `~/.photo_quality_analyzer/camera_database.json`. The library will automatically load and merge it with the built-in data.
+
+**JSON Format**:
+```json
+{
+    "Sony": {
+        "A7RV": {
+            "dr": 14.8,
+            "sensor": "full_frame",
+            "aliases": ["ILCE-7RM5"]
+        }
+    }
+}
+```

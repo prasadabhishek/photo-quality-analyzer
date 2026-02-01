@@ -21,22 +21,25 @@ class TestPhase2Metrics(unittest.TestCase):
     """Test suite for Phase 2 Context-Aware Metrics."""
 
     def setUp(self):
-        # Create a clean image (100x100 gray)
+        # Create a clean image (100x100)
         self.img = np.zeros((100, 100, 3), dtype=np.uint8)
         self.gray = np.zeros((100, 100), dtype=np.uint8)
-        # Add high-frequency texture but ULTRA LOW intensity to avoid 1.0 ceiling
+        
+        # Add a gradient to ensure non-zero Histogram Width for Dynamic Range testing
+        # 0 to 255 gradient across the x-axis
+        for x in range(100):
+            val = int((x / 100.0) * 255)
+            self.gray[:, x] = val
+            
+        # Add high-frequency texture but LOW intensity
         # Checkerboard pattern in top-left (Mock ROI)
-        self.gray[0:2, 0:2] = 1 # Only 4 pixels for focus
+        self.gray[0:2, 0:2] = 1 
         # Texture for sharpness - just a few pixels
-        self.gray[50:52, 50:52] = 1
+        self.gray[50:52, 50:52] = 128 # Stronger edge for sharpness
+        
         # Sync RGB
         for c in range(3):
             self.img[:, :, c] = self.gray
-
-
-
-
-
 
     def test_sharpness_aperture_adjustment(self):
         """Test that sharpness score is adjusted based on aperture."""
@@ -52,10 +55,10 @@ class TestPhase2Metrics(unittest.TestCase):
         print(f"f/8 score: {score_f8:.4f}, Explanation: {expl_f8}")
         print(f"f/22 score: {score_f22:.4f}, Explanation: {expl_f22}")
         
-        self.assertIn("Diffraction-limited", expl_f22)
-        # At same raw sharpness, f/22 should score HIGHER because it's adjusted for physics
-        self.assertGreater(score_f22, score_f8)
-
+        self.assertIn("Diffraction Limit", expl_f22)
+        # We removed the artificial boost, so we don't assert score_22 > score_8 anymore.
+        # Instead, we verify we get the warning.
+        
     def test_exposure_action_tolerance(self):
         """Test that exposure scoring is more lenient for fast shutter speeds."""
         # Create a slightly clipped image (4% highlight clipping)
@@ -93,7 +96,7 @@ class TestPhase2Metrics(unittest.TestCase):
         print(f"RX100 score: {score_low:.4f}")
         print(f"A7RV score: {score_high:.4f}")
         
-        # Lower capability camera gets a HIGHER score for the same content 
+        # Lower capability camera gets a HIGHER score for the same content (gradient)
         # because it's utilizing more of its available potential.
         self.assertGreater(score_low, score_high)
 

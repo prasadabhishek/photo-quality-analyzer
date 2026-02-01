@@ -36,7 +36,7 @@ For professional photographers, the ability to analyze RAW files directly is cri
 **The Math**:
 - We perform a **Fast Fourier Transform (FFT)** to move into the spatial frequency domain.
 - We analyze the **Anisotropy Ratio** (Directionality) of the High-Frequency (HF) spectrum using 2nd-order Central Moments.
-- **Aperture-Awareness**: The engine fetches the camera's sensor size and aperture. It calculates the **Airy Disk** diameter ($D = 2.44 \cdot \lambda \cdot N$). If the aperture ($N$) is beyond the **Diffraction Limited Aperture (DLA)** of the sensor, the sharpness score is normalized to reflect the physical limits of the optical system.
+- **Diffraction Warnings**: The engine calculates the **Diffraction Limited Aperture (DLA)** ($N = \frac{\text{Pixel Pitch}}{1.22 \lambda}$). If the current aperture exceeds this limit (e.g., f/22 on a high-res sensor), the engine reports the raw sharpness score but appends a **Technical Warning** ("Diffraction Limit Reached"). This ensures honest reporting of physical softness rather than artificially boosting the score.
 
 ---
 
@@ -49,7 +49,9 @@ For professional photographers, the ability to analyze RAW files directly is cri
 - **Zone 0-I**: Destructive "Crushed" shadows.
 - **Zone V**: Ideal 18% gray (Middle Gray).
 - **Zone IX-X**: Destructive "Blown" highlights.
-- **Metric**: The score calculates the deviance from Zone V while applying heavy nonlinear penalties for clipping in Zone 0 or X.
+- **Zone IX-X**: Destructive "Blown" highlights.
+- **Subject-Aware Metering**: If a subject is detected (via YOLO), the engine calculates the average luminance of the **Subject's Bounding Box** and targets Zone V (18% gray) for that specific region. This ensures that backlit portraits are scored correctly even if the background is blown out.
+- **Global Fallback**: If no subject is found, the engine evaluates the global histogram, penalizing clipping in Zones 0 and X.
 - **Shutter-Awareness**: At fast shutter speeds (action shots), the engine grants higher tolerance for highlight clipping to prioritize frozen motion.
 
 ---
@@ -61,8 +63,10 @@ For professional photographers, the ability to analyze RAW files directly is cri
 **The Process**:
 - The image is divided into an 8x8 grid of patches.
 - We calculate the variance ($\sigma^2$) for each patch.
-- We identify the 5 "smoothest" patches (lowest variance) to isolate the sensor's **Noise Floor** from actual image detail.
-- **Normalization**: The noise score is dynamically scaled based on the **ISO setting**. A clean image at ISO 12,800 is rated relative to the expected performance of the hardware at that gain level.
+- **Chroma vs. Luma**: The engine separates noise into two components using the **LAB Color Space**:
+    1.  **Luminance (L channel)**: Treated as "Grain". Normalized generously to allow for filmic texture.
+    2.  **Chrominance (A/B channels)**: Treated as "Digital Noise". Penalized heavily (0.4 weight) as color blotches are rarely desirable.
+- **ISO-Adaptive**: The noise floor is dynamically normalized based on the **ISO setting**. A clean image at ISO 12,800 is rated relative to the expected photon shot noise at that gain level.
 
 ---
 
@@ -71,8 +75,9 @@ For professional photographers, the ability to analyze RAW files directly is cri
 **ELI5**: Think of a box of 256 crayons. If a photo only uses 5 shades of gray, it looks "flat." If it uses a wide variety of "crayons" from the brightest white to the darkest shadow, it has "high dynamic range." The engine counts how much of that variety is present in the image.
 
 **The Metric**:
-- **Formula**: $H = -\sum P(x) \log_2 P(x)$ (Shannon Entropy)
-- Max entropy ($H=8.0$) represents a perfectly distributed 8-bit tonal range.
+- **Previous Flaw**: Shannon Entropy ($H$) conflated **Noise** with **Detail**. A noisy gray card would score higher than a clean gradient.
+- **New Metric**: **98th-Percentile Histogram Width**. 
+- **The Math**: We calculate the width of the histogram that contains the central 98% of pixel values. This ignores salt-and-pepper noise outliers and measures the actual **Tonal Utilization** of the sensor's bit depth.
 - **Benchmarking**: The result is normalized against our internal database of **Photons-to-Photos PDR** curves, ensuring results are comparable across different sensor sizes.
 
 ---
@@ -86,8 +91,14 @@ For professional photographers, the ability to analyze RAW files directly is cri
 1.  **ROI Masking**: Instead of grading global sharpness, the engine prioritizes the bounding box of the main subject.
 2.  **Intent Check**: If the subject is sharp but the background has "bokeh" (intentional blur), the engine recognizes this as a stylistic choice rather than a technical failure.
 
-### Composition: Rule of Thirds
-The engine calculates the Euclidean distance between the centroids of detected subjects and the four "Power Points" of the Rule of Thirds grid. 
+### Composition: Headroom Analysis
+The engine uses psychophysical heuristics to evaluate framing for portraits:
+
+1.  **Rule of Thirds**: Distances centroids to Power Points.
+2.  **Headroom Analysis**: Calculates the vertical space above the subject's head box.
+    - **< 2%**: Penalty (Chopped head / Claustrophobic).
+    - **> 35%**: Penalty (Excessive dead space).
+    - **Ideal Range**: 8-20% of frame height.
 
 ---
 
