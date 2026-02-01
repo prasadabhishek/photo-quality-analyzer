@@ -1,37 +1,106 @@
-# Scientific Foundation of photo-quality-analyzer
+# Scientific Documentation: photo-quality-analyzer
 
-This document provides a technical deep-dive into the signal processing and computer vision algorithms used to assess photographic quality.
+This document provides a comprehensive technical deep-dive into the signal processing, computer vision, and optical physics foundations of the **Photo Quality Analyzer**.
 
 ---
 
-## 1. Sharpness: FFT-Based Acutance
-Most sharpness algorithms rely on simple edge gradients (like the Laplacian), which are highly susceptible to sensor noise and rotation.
+## 1. High-Level Workflow
 
-**Our Approach**: We transform the image into the frequency domain using **Fast Fourier Transform (FFT)**. We analyze the **Anisotropy** and magnitude spectrum moments to determine purely optical clarity.
-- **Diffraction Adjustment**: The engine fetches the camera's sensor size and aperture from EXIF. It calculates the **Airy Disk** size to determine if the image is "soft" due to physics (diffraction) rather than poor focus.
-- **Reference**: [Cambridge in Colour: Diffraction](https://www.cambridgeincolour.com/tutorials/diffraction-photography.htm)
+The engine follows a structured pipeline to transform raw pixel data into human-readable photographic judgements:
 
-## 2. Exposure: Ansel Adams Zone System
-Instead of a simple mean brightness, we analyze the histogram using the **Zone System**.
-- **Zone 0-I**: Pitch black (Blocked shadows).
-- **Zone V**: Mid-gray (Ideal exposure).
-- **Zone IX-X**: Pure white (Clipping/Blown highlights).
-- **Metric**: The exposure score penalizes pixels in Zones 0 and X, while favoring Zone V. Unlike standard "brightness" checks, this allows for high-key or low-key artistic choices as long as "destructive" clipping is avoided.
-- **Reference**: [Ansel Adams Zone System](https://en.wikipedia.org/wiki/Zone_System)
+1.  **Ingestion**: Format detection and high-fidelity loading (RAW/JPEG).
+2.  **Context Extraction**: EXIF parsing for hardware metadata (Aperture, ISO, Model).
+3.  **Neural Detection**: YOLOv11 subject identification and ROI definition.
+4.  **Signal Analysis**: Parallel computation of frequency, tonal, and statistical metrics.
+5.  **Normalization**: Benchmarking results against a database of **147+ camera models**.
+6.  **Synthesis**: Weighted averaging and linguistic mapping to final labels.
 
-## 3. Dynamic Range & Tonal Density: Shannon Entropy
-To measure how much information is actually recorded in the tonal range, we use **Shannon Entropy**.
-- **Theory**: Tonal range is not just about the distance between black and white; it's about the density of information in between. Entropy measures the "unpredictability" or information density of the pixel intensities.
-- **Normalization**: The result is normalized against the camera's **Photons-to-Photos** PDR (Photographic Dynamic Range) baseline.
+---
 
-## 4. Hardware-Aware Normalization
-A photo from a Sony A7R V (61MP Full Frame) should not be held to the same absolute acutance standard as an iPhone 15 (12MP). 
-- **Database**: We maintain a JSON database of **147+ camera models**.
-- **Metrics**: We store pixel pitch, sensor dimensions, and laboratory benchmarked dynamic range for each model.
-- **Adjustment**: The engine "grades on a curve" based on the hardware used, ensuring fair comparisons across different gear tiers.
+## 2. Ingestion & RAW Pipeline
 
-## 5. Subject-Aware Focus: Neural ROI
-Traditional "Global Sharpness" fails if the background is intentionally blurred (bokeh).
-- **AI Integration**: We use **YOLOv11** to identify subjects (people, animals, cars).
-- **ROI Masking**: We calculate sharpness *only* within the bounding box of the detected subject.
-- **Focus Fall-off**: We compare subject sharpness to background sharpness to verify that the focus was intentional.
+For professional photographers, the ability to analyze RAW files directly is critical. The engine implements a 3-tier loading strategy:
+
+1.  **RAW De-mosaicing ([LibRaw](https://www.libraw.org/))**: Uses the `rawpy` wrapper to extract 16-bit linear signal data. The engine uses a "Turbo Optimization" (`half_size=True`) to ensure sub-second analysis of 60MP+ files.
+2.  **High-Res Preview Recovery**: If de-mosaicing fails, it parses the EXIFMakerNote for the largest embedded JPEG preview (often full-resolution).
+3.  **Standard Decoding**: Falls back to `OpenCV`'s hardware-accelerated decoders.
+
+---
+
+## 3. Core Technical Metrics
+
+### A. Sharpness: FFT Anisotropy & Diffraction
+Standard sharpness checks (like Laplacian Variance) are easily fooled by noise or directional texture.
+
+**The Math**:
+- We perform a **Fast Fourier Transform (FFT)** to move into the spatial frequency domain.
+- We analyze the **Anisotropy Ratio** (Directionality) of the High-Frequency (HF) spectrum using 2nd-order Central Moments.
+- **Aperture-Awareness**: The engine fetches the camera's sensor size and aperture. It calculates the **Airy Disk** diameter ($D = 2.44 \cdot \lambda \cdot N$). If the aperture ($N$) is beyond the **Diffraction Limited Aperture (DLA)** of the sensor, the sharpness score is normalized to reflect the physical limits of the glass, rather than user error.
+
+### B. Exposure: Ansel Adams Zone System
+The engine moves beyond simple "mean brightness" by applying the **Zone System** developed by Ansel Adams.
+
+**The Logic**:
+- The histogram is divided into 11 zones (0-X).
+- **Zone 0-I**: Destructive "Crushed" shadows.
+- **Zone V**: Ideal 18% gray (Middle Gray).
+- **Zone IX-X**: Destructive "Blown" highlights.
+- **Metric**: The score calculates the deviance from Zone V while applying heavy nonlinear penalties for clipping in Zone 0 or X.
+- **Shutter-Awareness**: At fast shutter speeds (action shots), the engine grants higher tolerance for highlight clipping to favor frozen motion.
+
+### C. Noise: ISO-Adaptive Variance Sampling
+Noise is estimated by sampling statistical variance in low-texture regions of the frame.
+
+**The Process**:
+- The image is divided into an 8x8 grid.
+- We calculate the variance ($\sigma^2$) for each patch.
+- We identify the 5 "smoothest" patches (lowest variance) to isolate the sensor's **Noise Floor** from actual image detail.
+- **Normalization**: The noise score is dynamically scaled based on the **ISO setting**. A clean image at ISO 12,800 is rated significantly higher than an equally clean image at ISO 100.
+
+### D. Dynamic Range: Tonal Entropy
+Dynamic Range is measured via **Shannon Entropy**, which treats the tonal distribution as an information channel.
+
+**The Metric**:
+- **Formula**: $H = -\sum P(x) \log_2 P(x)$
+- Max entropy ($H=8.0$) represents a perfectly distributed 8-bit tonal range.
+- **Benchmarking**: The result is normalized against our internal database of **Photons-to-Photos PDR** curves, ensuring a smartphone isn't unfairly compared to a Medium Format sensor.
+
+---
+
+## 4. Visual Intelligence & Neural ROI
+
+### YOLOv11 Object Detection
+The engine uses a neural network to understand *what* is in the frame. This is critical for **Subject-Aware Sharpness**.
+
+1.  **ROI Masking**: Instead of grading global sharpness, the engine prioritizes the bounding box of the main subject (e.g., a person or animal).
+2.  **Intent Check**: If the subject is sharp but the background has "bokeh" (intentional blur), the engine rewards the photo for technical mastery rather than penalizing it for background softness.
+
+### Composition: Rule of Thirds
+The engine calculates the Euclidean distance between the centroids of detected subjects and the four "Power Points" of the Rule of Thirds grid. 
+
+---
+
+## 5. The Synthesis Engine
+
+The final `overallConfidence` is calculated using a weighted gatekeeper formula:
+
+$$Score = Tech \cdot (0.8 + 0.2 \cdot Aesthetic)$$
+
+**Weights**:
+- **Technical (60%)**: Sharpness (40%), Focus (30%), Exposure (20%), Noise (10%).
+- **Aesthetic (40%)**: Dynamic Range (40%), Color Balance (40%), Composition (20%).
+
+**Linguistic Mapping**:
+Final scores are mapped to a qualitative scale used in XMP sidecars and CLI output:
+- **Excellent**: ≥ 0.8 (Award 5 Stars)
+- **Good**: ≥ 0.65 (Award 3 Stars)
+- **Acceptable**: ≥ 0.5 (Keep)
+- **Poor**: < 0.35 (Rejected Label)
+
+---
+
+## 6. Resources & References
+- **Optical Theory**: [Cambridge in Colour](https://www.cambridgeincolour.com/)
+- **Sensor Benchmarks**: [DXOMARK](https://www.dxomark.com/)
+- **Dynamic Range Curves**: [PhotonsToPhotos](https://www.photonstophotos.net/)
+- **XMP Standard**: [Adobe XMP Core Specification](https://www.adobe.com/products/xmp.html)
