@@ -11,6 +11,19 @@ pip install photo-quality-analyzer-core
 ```
 *Full RAW support (`.ARW`, `.CR2`, `.NEF`, etc.) is included by default.*
 
+## Metrics
+
+The engine evaluates technical quality through a multi-dimensional lens:
+
+- **Sharpness**: FFT-based acutance, invariant to rotation and noise.
+- **Exposure**: Ansel Adams Zone System analysis for clipping detection.
+- **Focus**: ROI-specific sharpness on the main subject (auto-detected).
+- **Noise**: Statistical variance estimation for ISO-related grain.
+- **Dynamic Range**: Tonal entropy and sensor-aware potential.
+- **Color Balance**: Neutral pixel selection for finding color casts.
+
+For a deep dive into the underlying physics and signal processing, see [SCIENCE.md](docs/SCIENCE.md).
+
 ## Usage
 
 ### CLI
