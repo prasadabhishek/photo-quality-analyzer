@@ -4,11 +4,23 @@ import subprocess
 import os
 import re
 
-def run_command(command, description):
-    print(f"--- Running {description} ---")
-    # Set PYTHONPATH to include the current directory so tests can find the package
+def run_command(command, description, capture=True):
+    print(f"\n--- Running {description} ---")
+    
+    # Ensure nested python calls use the current interpreter (the venv one)
+    python = sys.executable
+    if command.startswith("python3"):
+        command = command.replace("python3", python, 1)
+    elif command.startswith("python"):
+        command = command.replace("python", python, 1)
+        
     env = os.environ.copy()
     env["PYTHONPATH"] = os.getcwd()
+    
+    # If we want to see the live output (like for tests), we don't capture
+    if not capture:
+        result = subprocess.run(command, shell=True, env=env)
+        return result.returncode == 0
     
     result = subprocess.run(command, capture_output=True, text=True, shell=True, env=env)
     if result.returncode != 0:
@@ -16,6 +28,9 @@ def run_command(command, description):
         print(result.stdout)
         print(result.stderr)
         return False
+    
+    if result.stdout.strip():
+        print(result.stdout)
     print(f"✅ Success: {description}")
     return True
 
@@ -91,16 +106,25 @@ def main():
     project_root = os.path.dirname(script_dir)
     os.chdir(project_root)
     
-    # 1. Unit Tests
-    if not run_command("python3 -m unittest discover tests", "Unit Tests"):
-        sys.exit(1)
-        
-    # 2. Consistency Checks
+    python = sys.executable
+    
+    # 1. Consistency Checks (Fastest)
     if not check_consistency():
         sys.exit(1)
+
+    # 2. Unit Tests with Coverage
+    print("\n--- Running Unit Tests with Coverage ---")
+    # Step 1: Run tests with coverage
+    test_cmd = f"{python} -m coverage run --source=photo_quality_analyzer_core -m unittest discover -v tests"
+    # We use capture=False here so the user sees the 22 tests running in real-time
+    if not run_command(test_cmd, "Tests & Coverage Collection", capture=False):
+        sys.exit(1)
         
-    # 3. Build Check (Dry Run)
-    if not run_command("python3 -m build --dry-run", "Build Check"):
+    # Step 2: Generate Report
+    run_command(f"{python} -m coverage report -m", "Coverage Report")
+        
+    # 3. Build Check
+    if not run_command(f"{python} -m build", "Build Readiness Check"):
         sys.exit(1)
         
     print("\n🚀 All validations passed! Ready to release.")

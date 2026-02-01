@@ -18,11 +18,21 @@ def main():
         
     bump_type = sys.argv[1]
     
+    # Ensure we are in the project root
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    os.chdir(project_root)
+    
+    # Add script dir to sys.path for importing bump_version
+    sys.path.append(script_dir)
+    
+    python = sys.executable
+    
     # 1. Validate
-    run("python3 scripts/validate_release.py", "Running Validations")
+    run(f"{python} scripts/validate_release.py", "Running Validations")
     
     # 2. Bump Version
-    run(f"python3 scripts/bump_version.py {bump_type}", f"Bumping Version ({bump_type})")
+    run(f"{python} scripts/bump_version.py {bump_type}", f"Bumping Version ({bump_type})")
     
     # Get new version
     from bump_version import get_current_version
