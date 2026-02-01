@@ -30,60 +30,61 @@ For professional photographers, the ability to analyze RAW files directly is cri
 ## 3. Core Technical Metrics
 
 ### A. Sharpness: FFT Anisotropy & Diffraction
-Standard sharpness checks (like Laplacian Variance) are easily fooled by noise or directional texture.
+
+**ELI5**: Imagine looking through a screen door. If the holes are big, you see clearly. If the holes are made very tiny (closing the aperture), the light starts to "bend" around the wires (diffraction) and the image naturally softens. The engine checks camera settings to determine if softness is a result of focus or if it is approaching the physical limits of the lens.
 
 **The Math**:
 - We perform a **Fast Fourier Transform (FFT)** to move into the spatial frequency domain.
 - We analyze the **Anisotropy Ratio** (Directionality) of the High-Frequency (HF) spectrum using 2nd-order Central Moments.
-- **Aperture-Awareness**: The engine fetches the camera's sensor size and aperture. It calculates the **Airy Disk** diameter ($D = 2.44 \cdot \lambda \cdot N$). If the aperture ($N$) is beyond the **Diffraction Limited Aperture (DLA)** of the sensor, the sharpness score is normalized to reflect the physical limits of the glass, rather than user error.
+- **Aperture-Awareness**: The engine fetches the camera's sensor size and aperture. It calculates the **Airy Disk** diameter ($D = 2.44 \cdot \lambda \cdot N$). If the aperture ($N$) is beyond the **Diffraction Limited Aperture (DLA)** of the sensor, the sharpness score is normalized to reflect the physical limits of the optical system.
 
-**ELI5**: Imagine looking through a screen door. If the holes are big, you see clearly. If you try to make the holes tiny (closing the aperture too much), the light starts to "bend" around the wires and gets blurry. We check your camera settings to see if the blur is your fault or just the way light works!
+---
 
 ### B. Exposure: Ansel Adams Zone System
-The engine moves beyond simple "mean brightness" by applying the **Zone System** developed by Ansel Adams.
+
+**ELI5**: Think of a photo like a coloring book. If a spot is colored pure white (blown highlights) or pure black (crushed shadows), the original drawing is lost. The engine evaluates the image to ensure most details are in the "middle" where they are clearly visible.
 
 **The Logic**:
-- The histogram is divided into 11 zones (0-X).
+- The histogram is divided into 11 zones (0-X) based on the Zone System.
 - **Zone 0-I**: Destructive "Crushed" shadows.
 - **Zone V**: Ideal 18% gray (Middle Gray).
 - **Zone IX-X**: Destructive "Blown" highlights.
 - **Metric**: The score calculates the deviance from Zone V while applying heavy nonlinear penalties for clipping in Zone 0 or X.
-- **Shutter-Awareness**: At fast shutter speeds (action shots), the engine grants higher tolerance for highlight clipping to favor frozen motion.
+- **Shutter-Awareness**: At fast shutter speeds (action shots), the engine grants higher tolerance for highlight clipping to prioritize frozen motion.
 
-**ELI5**: We look at a photo like a coloring book. If you press too hard and turn a spot pure white (blown highlights) or pure black (crushed shadows), you lose the drawing! We try to make sure most of your "coloring" is in the middle where we can see the details.
+---
 
 ### C. Noise: ISO-Adaptive Variance Sampling
-Noise is estimated by sampling statistical variance in low-texture regions of the frame.
+
+**ELI5**: Imagine listening to music with some background static. If you are in a quiet room (Low ISO), static is very noticeable. If you are at a loud concert (High ISO), a little bit of static is expected and less distracting. The engine adjusts its expectations based on how "loud" the sensor was set to.
 
 **The Process**:
-- The image is divided into an 8x8 grid.
+- The image is divided into an 8x8 grid of patches.
 - We calculate the variance ($\sigma^2$) for each patch.
 - We identify the 5 "smoothest" patches (lowest variance) to isolate the sensor's **Noise Floor** from actual image detail.
-- **Normalization**: The noise score is dynamically scaled based on the **ISO setting**. A clean image at ISO 12,800 is rated significantly higher than an equally clean image at ISO 100.
+- **Normalization**: The noise score is dynamically scaled based on the **ISO setting**. A clean image at ISO 12,800 is rated relative to the expected performance of the hardware at that gain level.
 
-**ELI5**: Imagine listening to music. "Noise" is like the static you hear when you turn the volume up too high. If you're in a very quiet room (Low ISO), we expect no static. If you're at a loud concert (High ISO), we're okay with a little static because it’s harder to hear perfectly there.
+---
 
 ### D. Dynamic Range: Tonal Entropy
-Dynamic Range is measured via **Shannon Entropy**, which treats the tonal distribution as an information channel.
+
+**ELI5**: Think of a box of 256 crayons. If a photo only uses 5 shades of gray, it looks "flat." If it uses a wide variety of "crayons" from the brightest white to the darkest shadow, it has "high dynamic range." The engine counts how much of that variety is present in the image.
 
 **The Metric**:
-- **Formula**: $H = -\sum P(x) \log_2 P(x)$
+- **Formula**: $H = -\sum P(x) \log_2 P(x)$ (Shannon Entropy)
 - Max entropy ($H=8.0$) represents a perfectly distributed 8-bit tonal range.
-- **Benchmarking**: The result is normalized against our internal database of **Photons-to-Photos PDR** curves, ensuring a smartphone isn't unfairly compared to a Medium Format sensor.
-
-**ELI5**: Think of a box of 256 crayons. If your photo only uses 5 shades of gray, it’s a "flat" photo. If it uses almost all 256 colors from the brightest light to the darkest shadow, it has "high dynamic range." We count how many "crayons" you actually used!
+- **Benchmarking**: The result is normalized against our internal database of **Photons-to-Photos PDR** curves, ensuring results are comparable across different sensor sizes.
 
 ---
 
 ## 4. Visual Intelligence & Neural ROI
 
 ### YOLOv11 Object Detection
-The engine uses a neural network to understand *what* is in the frame. This is critical for **Subject-Aware Sharpness**.
 
-1.  **ROI Masking**: Instead of grading global sharpness, the engine prioritizes the bounding box of the main subject (e.g., a person or animal).
-2.  **Intent Check**: If the subject is sharp but the background has "bokeh" (intentional blur), the engine rewards the photo for technical mastery rather than penalizing it for background softness.
+**ELI5**: If you take a picture of a dog, the dog should be sharp, but it's often okay (or even preferred) if the trees behind it are blurry. The engine identifies the main subject so it can judge the focus where it matters most.
 
-**ELI5**: If you take a picture of a dog, we make sure the *dog* is sharp. We don't care if the trees behind him are blurry—in fact, that usually looks better! We're smart enough to know what you were trying to photograph.
+1.  **ROI Masking**: Instead of grading global sharpness, the engine prioritizes the bounding box of the main subject.
+2.  **Intent Check**: If the subject is sharp but the background has "bokeh" (intentional blur), the engine recognizes this as a stylistic choice rather than a technical failure.
 
 ### Composition: Rule of Thirds
 The engine calculates the Euclidean distance between the centroids of detected subjects and the four "Power Points" of the Rule of Thirds grid. 
