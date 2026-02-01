@@ -14,7 +14,6 @@ For developers or users who want the latest changes directly from the source:
 ```bash
 pip install git+https://github.com/prasadabhishek/photo-quality-analyzer.git
 ```
-*Full RAW support (`.ARW`, `.CR2`, `.NEF`, etc.) is included by default.*
 
 ## Metrics
 
