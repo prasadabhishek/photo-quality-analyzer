@@ -24,17 +24,13 @@
 
 ## 📦 Installation
 
-Primary installation is via PyPI:
+Install the core engine via PyPI:
 
 ```bash
 pip install photo-quality-analyzer-core
 ```
 
-To include RAW support (requires `LibRaw` dependencies):
-
-```bash
-pip install "photo-quality-analyzer-core[raw]"
-```
+*Note: Includes full RAW support (ARW, CR2, NEF, etc.) out of the box.*
 
 Alternatively, install from source:
 

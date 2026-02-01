@@ -26,11 +26,11 @@ dependencies = [
     "ultralytics>=8.3.0",
     "tqdm>=4.66.0",
     "exifread>=3.0.0",
-    "scipy>=1.14.0"
+    "scipy>=1.14.0",
+    "rawpy>=0.23.0"
 ]
 
 [project.optional-dependencies]
-raw = ["rawpy>=0.26.0"]
 test = ["unittest"]
 
 [tool.setuptools]
