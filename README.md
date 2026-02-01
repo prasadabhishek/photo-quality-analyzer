@@ -4,10 +4,15 @@
 
 [photo-quality-analyzer](https://github.com/prasadabhishek/photo-quality-analyzer) is a local-first Python SDK and CLI tool that uses signal processing and computer vision to objectively score photographic quality. It normalizes metrics against a database of **147+ camera models** to account for sensor-specific physics like diffraction limits and dynamic range baselines.
 
-## Install
-
+### From PyPI
 ```bash
 pip install photo-quality-analyzer-core
+```
+
+### From GitHub (Source)
+For developers or users who want the latest changes directly from the source:
+```bash
+pip install git+https://github.com/prasadabhishek/photo-quality-analyzer.git
 ```
 *Full RAW support (`.ARW`, `.CR2`, `.NEF`, etc.) is included by default.*
 
