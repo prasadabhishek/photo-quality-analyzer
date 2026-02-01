@@ -12,11 +12,12 @@
 
 ## ⚡ Key Capabilities
 
-*   **FFT Sharpness**: Uses Fast Fourier Transform (magnitude spectrum moments) to measure purely optical sharpness, invariant to rotation.
-*   **Zone System Exposure**: Analyzes luminance histograms using Ansel Adams' Zone System to detect clipping and dynamic range issues.
-*   **Neural Subject Detection**: Leverages **YOLO12x** to identify main subjects, ensuring metrics are calculated on the *subject*, not the background.
-*   **RAW Fidelity**: Extracts high-resolution (>1080p) previews from Sony ARW, Canon CR2, and Nikon NEF files for accurate analysis.
-*   **Privacy First**: 100% local execution. No images ever leave your machine.
+*   **FFT Sharpness**: Uses Fast Fourier Transform Anisotropy to measure purely optical sharpness, invariant to rotation, with **Aperture-Aware diffraction adjustments**.
+*   **Scientific Exposure**: Analyzes luminance histograms using Ansel Adams' **Zone System** and **Shannon Entropy** to detect clipping and tonal density issues.
+*   **Physics-Aware Scoring**: Normalizes metrics against an expanded database of **147+ camera models** (DXOMARK/PhotonsToPhotos benchmarks).
+*   **Neural Subject Detection**: Leverages **YOLOv11** to identify main subjects, ensuring metrics like focus and composition are calculated on the *subject*.
+*   **RAW Fidelity**: High-fidelity extraction from ARW, CR2, NEF, DNG, and more via `rawpy` or focused EXIF preview extraction.
+*   **Privacy First**: 100% local execution. No internet access or telemetry required.
 
 ---
 
@@ -86,12 +87,13 @@ img = _load_image_with_raw_support("DSC001.ARW")
 
 ## 🔬 How It Works
 
-| Metric | Technology | Why it matters |
+| Metric | Technology | Scientific Basis |
 | :--- | :--- | :--- |
-| **Sharpness** | FFT (Fast Fourier Transform) | Distinguishes between "artistic bokeh" and "missed focus" by analyzing high-frequency energy. |
-| **Exposure** | Histogram Zones | Penalizes only "destructive" clipping (blown highlights) while allowing artistic shadows. |
-| **Subject** | YOLO12x (Nano/X) | Understands *what* is in the photo to weight sharpness on the subject (e.g., eyes) over the background. |
-| **Noise** | Variance Filters | Estimates sensor ISO noise to penalize low-light grain heavily. |
+| **Sharpness** | FFT Anisotropy | [Diffraction Limits](https://www.cambridgeincolour.com/tutorials/diffraction-photography.htm) |
+| **Exposure** | Histogram Zones | [Ansel Adams Zone System](https://en.wikipedia.org/wiki/Zone_System) |
+| **Subject** | YOLOv11 (Nano/Med) | [Object Detection](https://arxiv.org/abs/1506.02640) |
+| **Noise** | Variance Filters | [Signal-to-Noise Ratio](https://en.wikipedia.org/wiki/Signal-to-noise_ratio) |
+| **Dynamic Range** | Tonal Entropy | [Shannon Entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) |
 
 ---
 
