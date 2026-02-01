@@ -175,18 +175,27 @@ def get_camera_data(camera_model: str) -> dict | None:
         
     model_upper = camera_model.upper()
     
-    # Iterate through brands and models
+    # Iterate through brands and models to find the best (longest) match
+    ignore_keys = {"General", "Heuristics"}
+    best_match = None
+    max_len = 0
+    
     for brand, models in _CAMERA_DB.items():
-        if brand == "General": continue
+        if brand in ignore_keys:
+            continue
         for model_name, specs in models.items():
-            # Check direct match
-            if model_name.upper() in model_upper:
-                return specs
-            # Check aliases
-            for alias in specs.get('aliases', []):
-                if alias.upper() in model_upper:
-                    return specs
-    return None
+            # Potential candidates for this specific model
+            candidates = [model_name.upper()] + [a.upper() for a in specs.get('aliases', [])]
+            
+            for cand in candidates:
+                # Check if candidate is in the image metadata string
+                if cand in model_upper:
+                    # We want the longest matching string to avoid "D700" matching "D7000"
+                    if len(cand) > max_len:
+                        max_len = len(cand)
+                        best_match = specs
+                        
+    return best_match
 
 # Placeholder for backward compatibility if needed, though we'll update callsites
 CAMERA_DYNAMIC_RANGE = {} 
@@ -206,9 +215,19 @@ SENSOR_SIZES = {
 def detect_sensor_size(camera_model: str) -> str:
     """
     Detects the physical sensor size category based on the camera model string.
-    Maps models to their corresponding sensor format to allow for physics-aware
-    adjustments (e.g., diffraction limits).
+    
+    Logic:
+    1. Direct Database Lookup: First, check if the specific model is in the 
+       camera database (including aliases).
+    2. Heuristic Pattern Matching: If not found, use brand-specific patterns
+       stored in the "Heuristics" section of the database to guess the size.
+    3. Default Fallback: Defaults to 'full_frame' if no match is found.
     """
+    global _CAMERA_DB
+    if _CAMERA_DB is None:
+        _CAMERA_DB = load_camera_database()
+
+    # 1. Direct Lookup
     specs = get_camera_data(camera_model)
     if specs and 'sensor_size' in specs:
         return specs['sensor_size']
@@ -218,27 +237,20 @@ def detect_sensor_size(camera_model: str) -> str:
     
     model_upper = camera_model.upper()
     
-    # Fallback heuristics for models not in DB
-    if any(x in model_upper for x in ['A7', 'A9', 'Z9', 'Z8', 'Z6', 'Z7', 'EOS R5', 'EOS R6', 'EOS R3', '1DX', '5D', '6D']):
-        return 'full_frame'
+    # 2. Database-Driven Heuristics (Longest match wins)
+    heuristics = _CAMERA_DB.get("Heuristics", {})
+    best_size = 'full_frame' # Default fallback
+    best_len = 0
     
-    # APS-C indicators
-    if any(x in model_upper for x in ['A6', 'X-T', 'X-H', 'X-E', 'X-S', 'X-PRO', 'EOS M', 'EOS R7', 'EOS R10', '90D', '80D', '70D', 'D500', 'D7', 'D5']):
-        return 'aps_c'
-    
-    # Micro Four Thirds
-    if any(x in model_upper for x in ['E-M', 'E-PL', 'E-P', 'GH', 'G9', 'G7', 'GX']):
-        return 'micro_four_thirds'
-    
-    # 1-inch sensors
-    if any(x in model_upper for x in ['RX100', 'RX10', 'G7 X', 'G5 X']):
-        return 'one_inch'
-    
-    # Small sensors
-    if any(x in model_upper for x in ['G3 X', 'SX', 'POWERSHOT']):
-        return 'one_over_two_three'
-    
-    return 'full_frame'  # Default fallback
+    for size, patterns in heuristics.items():
+        for p in patterns:
+            p_upper = p.upper()
+            if p_upper in model_upper:
+                if len(p_upper) > best_len:
+                    best_len = len(p_upper)
+                    best_size = size
+            
+    return best_size
 
 
 

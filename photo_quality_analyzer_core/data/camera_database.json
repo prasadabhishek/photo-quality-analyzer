@@ -1110,5 +1110,59 @@
             "dr": 11.0,
             "sensor_size": "one_inch"
         }
+    },
+    "Heuristics": {
+        "full_frame": [
+            "A7",
+            "A9",
+            "Z9",
+            "Z8",
+            "Z6",
+            "Z7",
+            "EOS R5",
+            "EOS R6",
+            "EOS R3",
+            "1DX",
+            "5D",
+            "6D"
+        ],
+        "aps_c": [
+            "A6",
+            "X-T",
+            "X-H",
+            "X-E",
+            "X-S",
+            "X-PRO",
+            "EOS M",
+            "EOS R7",
+            "EOS R10",
+            "90D",
+            "80D",
+            "70D",
+            "D500",
+            "D7000",
+            "D5200",
+            "D3300"
+        ],
+        "micro_four_thirds": [
+            "E-M",
+            "E-PL",
+            "E-P",
+            "GH",
+            "G9",
+            "G7",
+            "GX"
+        ],
+        "one_inch": [
+            "RX100",
+            "RX10",
+            "G7 X",
+            "G5 X"
+        ],
+        "one_over_two_three": [
+            "G3 X",
+            "SX",
+            "POWERSHOT"
+        ]
     }
 }
