@@ -22,7 +22,12 @@ The engine evaluates technical quality through a multi-dimensional lens:
 - **Dynamic Range**: Tonal entropy and sensor-aware potential.
 - **Color Balance**: Neutral pixel selection for finding color casts.
 
-For a deep dive into the underlying physics and signal processing, see [SCIENCE.md](docs/SCIENCE.md).
+- **Color Balance**: Neutral pixel selection for finding color casts.
+
+For more information, see our documentation:
+- 📖 **[USAGE.md](docs/USAGE.md)**: Practical examples and CLI guides.
+- ⚙️ **[API.md](docs/API.md)**: Technical reference for Python developers.
+- 🔬 **[SCIENCE.md](docs/SCIENCE.md)**: Deep dive into the underlying physics and algorithms.
 
 ## Usage
 
@@ -34,18 +39,15 @@ python analyzer.py --folder_path /path/to/photos --move
 ```
 
 ### SDK
-Use the high-level evaluation engine in your own Python projects:
-
 ```python
 from photo_quality_analyzer_core.analyzer import evaluate_photo_quality
 
 # Works with JPEGs and RAW files
 result = evaluate_photo_quality("photo.arw")
-
-print(result['overallConfidence'])    # 0.0 - 1.0 score
-print(result['judgement'])            # "Excellent", "Good", etc.
-print(result['metrics']['sharpness']) # Detailed signal data
+print(result['judgement']) # "Excellent", "Good", etc.
 ```
+
+*See [USAGE.md](docs/USAGE.md) for more advanced examples (AI toggling, metric filtering, etc).*
 
 ## How it works
 
@@ -56,15 +58,10 @@ The engine uses a hybrid approach to distinguish between artistic intent and tec
 3.  **Neural ROI**: Leverages **YOLOv11** to identify main subjects, ensuring metrics are calculated on the subject rather than the background.
 4.  **Sensor Normalization**: Benchmarks images against the known limits of the specific camera sensor (Full Frame vs APS-C vs 1-inch).
 
-## API
+### `evaluate_photo_quality(file_path, ...)`
+The primary entry point. It returns a dictionary containing scores, qualitative labels, and AI-generated scene descriptions.
 
-### `evaluate_photo_quality(file_path, enable_subject_detection=True)`
-
-Returns a dictionary containing:
-- `overallConfidence`: Weighted average (0-1).
-- `judgement`: Qualitative label.
-- `metrics`: Granular data for Sharpness, Exposure, Noise, and Dynamic Range.
-- `image_description`: List of detected objects.
+*See [API.md](docs/API.md) for full function signatures and return types.*
 
 ## Contributing
 
