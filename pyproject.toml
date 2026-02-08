@@ -39,3 +39,4 @@ packages = ["photo_quality_analyzer_core"]
 
 [tool.setuptools.package-data]
 "photo_quality_analyzer_core.data" = ["*.json"]
+"photo_quality_analyzer_core.resources.models" = ["*.onnx"]

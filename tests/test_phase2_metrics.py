@@ -105,31 +105,27 @@ class TestPhase2Metrics(unittest.TestCase):
         # Mock YOLO model presence to enter the logic block
         original_model = analyzer.g_yolo_model
         
-        class MockBoxList:
-            def __init__(self, box):
-                self.box_obj = box
-            def __len__(self):
-                return 1
-            def __getitem__(self, idx):
-                return self.box_obj
-            @property
-            def xyxy(self):
-                return type('obj', (object,), {'cpu': lambda s: type('obj', (object,), {'numpy': lambda s: np.array([[0, 0, 10, 10]])})()})()
-            @property
-            def conf(self):
-                return type('obj', (object,), {'cpu': lambda s: type('obj', (object,), {'numpy': lambda s: np.array([0.9])})()})()
-            @property
-            def cls(self):
-                return type('obj', (object,), {'cpu': lambda s: type('obj', (object,), {'numpy': lambda s: np.array([0])})()})()
+        class MockInput:
+            def __init__(self, name):
+                self.name = name
 
         class MockModel:
-            def __call__(self, *args, **kwargs):
-                return self.predict(*args, **kwargs)
-            def predict(self, *args, **kwargs):
-                class MockResult:
-                    def __init__(self):
-                        self.boxes = MockBoxList(None)
-                return [MockResult()]
+            def get_inputs(self):
+                return [MockInput("images")]
+            def get_modelmeta(self):
+                class Meta:
+                    custom_metadata_map = {'names': "{0: 'person'}"}
+                return Meta()
+            def run(self, output_names, input_feed):
+                # Return mock YOLOv11 output (1, 84, 8400)
+                # 84 = 4 boxes + 80 classes
+                # We need one detection for 'person' (index 0)
+                output = np.zeros((1, 84, 8400), dtype=np.float32)
+                # Set box for person at index 0 (cx, cy, w, h)
+                output[0, :4, 0] = [320, 320, 100, 100]
+                # Set confidence for person (index 0 + 4 = 4)
+                output[0, 4, 0] = 0.9
+                return [output]
 
         analyzer.g_yolo_model = MockModel()
         analyzer.g_coco_names = ["person"]

@@ -133,7 +133,7 @@ def load_config(config_file_path: str = CONFIG_FILE_PATH) -> dict:
 _cfg = load_config()
 SHARPNESS_NORMALIZATION_FACTOR = _cfg.get('SHARPNESS_NORMALIZATION_FACTOR', 1000.0)
 FOCUS_AREA_NORMALIZATION_FACTOR = _cfg.get('FOCUS_AREA_NORMALIZATION_FACTOR', 1000.0)
-NOISE_NORMALIZATION_FACTOR = _cfg.get('NOISE_NORMALIZATION_FACTOR', 50.0)
+NOISE_NORMALIZATION_FACTOR = _cfg.get('NOISE_NORMALIZATION_FACTOR', 250.0) # Forensic baseline
 EXPOSURE_IDEAL_MEAN_INTENSITY = _cfg.get('EXPOSURE_IDEAL_MEAN_INTENSITY', 128.0)
 DYNAMIC_RANGE_MAX_VALUE = _cfg.get('DYNAMIC_RANGE_MAX_VALUE', 255.0)
 YOLO_CONFIDENCE_THRESHOLD = _cfg.get('YOLO_CONFIDENCE_THRESHOLD', 0.5)
@@ -408,11 +408,14 @@ def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> N
     if model_size.lower().endswith(".pt") or model_size.lower().endswith(".onnx"):
         requested_model = model_size
     else:
-        # Try finding in local resources/models folder first (standard cleanup structure)
+        # Try finding in local resources/models or package resources
         model_filename = model_map.get(model_size.lower(), "yolo11n.onnx")
+        pkg_resource_path = os.path.join(PACKAGE_DIR, "resources", "models", model_filename)
         local_resource_path = os.path.join(os.getcwd(), "resources", "models", model_filename)
         
-        if os.path.exists(local_resource_path):
+        if os.path.exists(pkg_resource_path):
+            requested_model = pkg_resource_path
+        elif os.path.exists(local_resource_path):
             requested_model = local_resource_path
         else:
             requested_model = model_filename
@@ -709,15 +712,16 @@ def _calculate_exposure(gray_img: np.ndarray, metadata: dict = None, detections:
     base_score = max(0.0, 1.0 - abs(mean_intensity - ideal_mean) / ideal_mean)
     score = max(0.0, base_score - clipping_penalty)
     
+    context_suffix = f" ({tolerance['context']} mode)" if tolerance['context'] != 'general' else ""
     if highlight_clip > 0.05:
-        explanation = "Excessive highlight clipping (blown out)."
+        explanation = f"Excessive highlight clipping (blown out){context_suffix}."
     elif shadow_clip > 0.15:
-        explanation = "Excessive shadow clipping (crushed blacks)."
+        explanation = f"Excessive shadow clipping (crushed blacks){context_suffix}."
     else:
         if score > 0.7:
-            explanation = f"Subject is well-exposed ({metering_mode} metering)." if metering_mode == "subject" else "Exposure is well-balanced."
+            explanation = f"Subject is well-exposed ({metering_mode} metering){context_suffix}." if metering_mode == "subject" else f"Exposure is well-balanced{context_suffix}."
         else:
-            explanation = "Exposure shows deviance from middle gray."
+            explanation = f"Exposure shows deviance from middle gray{context_suffix}."
         
     return float(score), explanation
 
