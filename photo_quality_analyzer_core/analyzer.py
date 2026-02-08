@@ -507,12 +507,10 @@ def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None) -> tuple[f
     distribution. High scores reflect a high ratio of high-frequency components
     relative to the total energy, indicating fine detail and sharp edges.
     
-    Aperture-Awareness:
-    Adjusts the score based on the "diffraction-limited aperture" (DLA). If a
-    narrow aperture (like f/22) is used, the system recognizes that physics
-    prevents tack-sharpness and normalizes expectations accordingly.
-    
-    Ref: https://www.cambridgeincolour.com/tutorials/sharpness.htm
+    Forensic Mode:
+    Unlike previous versions, this does NOT reward slow shutter speeds as 
+    "Artistic Blur". It treats directionality with slow shutter as a penalty 
+    for camera shake.
     """
     # Compute FFT
     f_transform = fft2(gray_img)
@@ -542,68 +540,79 @@ def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None) -> tuple[f
     hf_energy = magnitude_spectrum[mask_hf]
     mean_hf = np.mean(hf_energy)
     
-    # Anisotropy: Moment Analysis (Rotationally Invariant)
-    # Optimized: Use relative coordinates directly from ogrid
-    # yy, xx = np.mgrid[:h, :w] - removed for memory efficiency
+    # Anisotropy: Moment Analysis
     rel_y = (np.arange(h) - cy)
     rel_x = (np.arange(w) - cx)
     
-    # We need to broadcast these for the mask
-    # But to save memory, we can mask the ogrid components if possible
     y_coords = rel_y.reshape(-1, 1).repeat(w, axis=1)[mask_hf]
     x_coords = rel_x.reshape(1, -1).repeat(h, axis=0)[mask_hf]
     
-    # Weight spatial coordinates by magnitude spectrum
     m00 = np.sum(hf_energy)
     m01 = np.sum(y_coords * hf_energy)
     m10 = np.sum(x_coords * hf_energy)
     
-    # Central moments
     mu20 = np.sum((x_coords - (m10/m00))**2 * hf_energy) / m00
     mu02 = np.sum((y_coords - (m01/m00))**2 * hf_energy) / m00
     mu11 = np.sum((x_coords - (m10/m00)) * (y_coords - (m01/m00)) * hf_energy) / m00
     
-    # Cleanup intermediate arrays
     del magnitude_spectrum
     del mask_hf
     del dist_from_center
     del y_coords
     del x_coords
     
-    # Eigenvalues of the structure tensor equivalent
     common = np.sqrt(((mu20 - mu02)/2)**2 + mu11**2 + 1e-9)
     lam1 = (mu20 + mu02) / 2 + common
     lam2 = (mu20 + mu02) / 2 - common
     
-    # Anisotropy ratio (1 - minor/major). 
     directionality = 1.0 - (lam2 / (lam1 + 1e-9))
     
-    # Final Sharpness Score: Combination of HF energy and Directionality
-    raw_score = min((mean_hf / (h*w)) * np.sqrt(directionality) * 8000.0, 1.0)
+    # Base Sharpness Calculation
+    if mean_hf < 0.0005:
+        fft_score = 0.0
+        directionality = 0.0
+    else:
+        # Multiplier tuned for 8-bit normalized FFT energy (Forensic sensitivity)
+        # Reduced from 2500.0 to 1500.0 to prevent premature 1.0 capping on high-contrast/high-MP images
+        fft_score = min((mean_hf / (h*w)) * np.sqrt(directionality) * 1500.0, 1.0)
+
+    # Local Contrast Check (Laplacian Variance)
+    # Provides a localized fallback to prevent global FFT noise from fooling the engine
+    laplacian_var = cv2.Laplacian(gray_img, cv2.CV_64F).var()
+    # Normalize: 100+ is typically very sharp, 50 is borderline, <20 is soft/blurry
+    lap_score = min(laplacian_var / 100.0, 1.0)
+
+    # Composite Raw Score: FFT is the primary signal, Laplacian is the secondary physics-based check
+    raw_score = (fft_score * 0.7) + (lap_score * 0.3)
     
-    # Phase 2: Aperture-aware adjustment
-    aperture = metadata.get("aperture") if metadata else None
-    camera_model = metadata.get("camera_model") if metadata else None
+    # Context-Aware Adjustments
+    metadata = metadata or {}
+    aperture = metadata.get("aperture")
+    shutter_speed = metadata.get("shutter_speed")
+    camera_model = metadata.get("model")
     sensor_size = detect_sensor_size(camera_model) if camera_model else 'full_frame'
     
+    score = raw_score
+    aperture_context = ""
+    
     if aperture is not None:
-        adjusted_score, aperture_context = adjust_sharpness_for_aperture(raw_score, aperture, sensor_size, SENSOR_SIZES)
-        score = adjusted_score
-    else:
-        score = raw_score
-        aperture_context = ""
+        score, aperture_context = adjust_sharpness_for_aperture(raw_score, aperture, sensor_size, SENSOR_SIZES)
     
-    # EXIF Interpretation
-    if metadata and metadata.get("shutter_speed") and metadata["shutter_speed"] >= 0.03: # slower than 1/30s
-        score = min(score * 1.5, 1.0)
-        explanation = "Artistic motion blur likely due to slow shutter."
-    else:
-        base_explanation = "Edges are sharp and directional." if score > 0.6 else "Image is blurry or dominated by random noise."
-        if aperture_context:
-            explanation = f"{base_explanation} ({aperture_context})"
-        else:
-            explanation = base_explanation
-    
+    # Forensic Check: Overly directional but low energy + slow shutter = Camera Shake
+    explanation = "Edges are sharp and directional." if score > 0.6 else "Image is blurry or dominated by random noise."
+
+    if shutter_speed is not None and shutter_speed >= 0.02: # 1/50s or slower
+        # Tightened directionality threshold from 0.7 to 0.45 for slow-shutter forensic audit
+        # Also penalized low Laplacian variance at slow speeds
+        if (directionality > 0.45 and raw_score < 0.3) or laplacian_var < 50.0:
+            score = max(0.0, score * 0.5)
+            explanation = "Likely camera shake (directional blur or low contrast with slow shutter)."
+        elif raw_score < 0.2:
+            explanation = "Defocus blur detected (slow shutter speed)."
+            
+    if aperture_context:
+        explanation = f"{explanation} ({aperture_context})"
+            
     return float(score), explanation
 
 
@@ -612,41 +621,25 @@ def _calculate_focus_area(
 ) -> tuple[float, str, set[str], str | None]:
     """
     Assesses focus accuracy on the main subject using YOLO and Laplacian Variance.
-    
-    Science:
-    1. Identifies the primary "subject" using the YOLO neural network.
-    2. Measures the Laplacian Variance (edge density) within the subject's 
-       bounding box (ROI).
-    3. Factors in Depth-of-Field (DOF): At wide apertures (e.g. f/1.4), 
-       sharpness expectations are concentrated strictly on the subject, while
-       deep-DOF images (f/11) are expected to be sharp across more of the frame.
-    
-    Ref: https://en.wikipedia.org/wiki/Depth_of_field
     """
     height, width = gray_img.shape
-    focus_score = overall_sharpness_score  # Default if no subject or error
+    focus_score = overall_sharpness_score 
     focus_explanation = "No main subject detected for focus; using overall sharpness."
     detected_obj_names: set[str] = set()
     main_subj_name: str | None = None
 
-    # Lazy-load detections if not provided
     if detections is None:
         detections = _detect_objects(img)
         
     if detections:
-        # 1. Gather all object names for report
         for d in detections:
             if d.get('name'):
                 detected_obj_names.add(d['name'])
         
-        # 2. Find the "Main Subject" (highest confidence)
         best_det = max(detections, key=lambda x: x['conf'])
-        
         x1_main, y1_main, x2_main, y2_main = map(int, best_det['box'])
-        main_subject_class_id = best_det['class_id']
         main_subj_name = best_det['name']
 
-        # Define Region of Interest (ROI)
         roi_x1, roi_y1 = int(max(0, x1_main)), int(max(0, y1_main))
         roi_x2, roi_y2 = int(min(x2_main, width)), int(min(y2_main, height))
 
@@ -656,16 +649,15 @@ def _calculate_focus_area(
                 gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
                 laplacian_var_roi = cv2.Laplacian(gray_roi, cv2.CV_64F).var()
                 
-                # Normalize logic specific to ROI focus
+                # Normalize logic
                 focus_score = min(laplacian_var_roi / FOCUS_AREA_NORMALIZATION_FACTOR, 1.0)
                 
-                # Phase 2: DOF-aware adjustment
-                aperture = metadata.get("aperture") if metadata else None
-                focal_length = metadata.get("focal_length") if metadata else None
+                metadata = metadata or {}
+                aperture = metadata.get("aperture")
+                focal_length = metadata.get("focal_length")
                 
                 if aperture is not None and focal_length is not None:
                     dof_factor = get_expected_focus_area(aperture, focal_length)
-                    # If DOF is shallow (low factor), we are more lenient with focus scores
                     if dof_factor < 0.5:  # Shallow DOF
                         focus_score = min(focus_score * 1.5, 1.0)
                         focus_explanation = "Main subject is in sharp focus (shallow DOF expected)." if focus_score > 0.7 \
@@ -681,118 +673,67 @@ def _calculate_focus_area(
         else:
             focus_explanation = "Invalid ROI (zero area); using overall sharpness."
 
-    return focus_score, focus_explanation, detected_obj_names, main_subj_name
+    return float(focus_score), focus_explanation, detected_obj_names, main_subj_name
 
 
 def _calculate_exposure(gray_img: np.ndarray, metadata: dict = None, detections: list = None) -> tuple[float, str]:
     """
     Evaluates exposure balance using Subject-Aware Zone System principles.
-    
-    Science:
-    1. Global Analysis: Detects "blown highlights" (clipping at 255).
-    2. Subject-Aware Metering: If a subject (person) is detected via YOLO,
-       the "Middle Gray" (Zone V) target is evaluated specifically on the subject,
-       ignoring the background (e.g., a dark room or bright beach).
-    3. Fallback: If no subject is found, defaults to global histogram metering.
-    
-    Ref: https://en.wikipedia.org/wiki/Zone_System
     """
     total_pixels = gray_img.size
-    
-    # 1. Highlight Clipping is almost always a technical error (blown channels)
-    # unless it's specular, but we penalize large areas of pure white.
     highlight_clip = np.sum(gray_img > 250) / total_pixels
     
-    # 2. Determine Metering Mode (Subject vs Global)
     subject_pixels = []
     if detections:
         for d in detections:
-            # Class 0 is 'person' in COCO dataset
-            if d.get('class_id') == 0: 
+            if d.get('class_id') == 0: # person
                 x1, y1, x2, y2 = map(int, d['box'])
-                # Clamp coordinates
                 h, w = gray_img.shape
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(w, x2), min(h, y2)
-                
                 if x2 > x1 and y2 > y1:
-                    crop = gray_img[y1:y2, x1:x2]
-                    subject_pixels.append(crop)
+                    subject_pixels.append(gray_img[y1:y2, x1:x2])
     
-    if subject_pixels and len(subject_pixels) > 0:
-        # Subject-Oriented Metering
-        # Flatten all subject pixels into one array
+    if subject_pixels:
         target_data = np.concatenate([p.ravel() for p in subject_pixels])
         mean_intensity = np.mean(target_data)
-        
-        # We are more lenient with shadow clipping in the background if subject is detected
-        # Check shadow clipping ONLY on the subject (e.g. hair or black clothes)
         shadow_clip = np.sum(target_data < 5) / target_data.size
         metering_mode = "subject"
     else:
-        # Global Metering (Fallback)
         mean_intensity = np.mean(gray_img)
         shadow_clip = np.sum(gray_img < 5) / total_pixels
         metering_mode = "global"
 
     ideal_mean = EXPOSURE_IDEAL_MEAN_INTENSITY
-    
-    # Phase 2: Context-aware clipping tolerance
     shutter_speed = metadata.get("shutter_speed") if metadata else None
     tolerance = get_exposure_tolerance(shutter_speed)
     
-    highlight_tolerance = tolerance['highlight_clip_tolerance']
-    shadow_tolerance = tolerance['shadow_clip_tolerance']
+    # Penalty calculation (Stricter in forensic mode)
+    clipping_penalty = (max(0, highlight_clip - tolerance['highlight_clip_tolerance']) + 
+                        max(0, shadow_clip - tolerance['shadow_clip_tolerance'])) * 3.0
     
-    # Penalty calculation
-    clipping_penalty = (max(0, highlight_clip - highlight_tolerance) + max(0, shadow_clip - shadow_tolerance)) * 2.0
-    
-    # Base score on mean deviance (Zone V targeting)
     base_score = max(0.0, 1.0 - abs(mean_intensity - ideal_mean) / ideal_mean)
-    
     score = max(0.0, base_score - clipping_penalty)
     
-    # Generate Explanation
-    if highlight_clip > 0.1:
+    if highlight_clip > 0.05:
         explanation = "Excessive highlight clipping (blown out)."
-    elif shadow_clip > 0.2:
+    elif shadow_clip > 0.15:
         explanation = "Excessive shadow clipping (crushed blacks)."
     else:
         if score > 0.7:
-            if metering_mode == "subject":
-                explanation = "Subject is well-exposed (Zone V)."
-            elif tolerance['context'] == 'action':
-                explanation = "Exposure is technically sound for action context."
-            else:
-                explanation = "Exposure is well-balanced."
+            explanation = f"Subject is well-exposed ({metering_mode} metering)." if metering_mode == "subject" else "Exposure is well-balanced."
         else:
-            if metering_mode == "subject":
-                explanation = "Subject is over/under-exposed."
-            else:
-                explanation = "Global exposure shows deviance."
+            explanation = "Exposure shows deviance from middle gray."
         
     return float(score), explanation
 
 
 def _calculate_noise(img: np.ndarray, gray_img: np.ndarray, metadata: dict = None) -> tuple[float, str]:
     """
-    Estimates sensor noise levels using multi-patch variance analysis in Luma and Chroma.
-    
-    Science:
-    1. Luminance Noise (Grain): Measured via variance in the Grayscale intensity.
-       Often acceptable or artistic (film grain).
-    2. Chrominance Noise (Color Blotches): Measured via variance in the 'a' and 'b'
-       channels of the CIELAB color space. Digital color noise is almost always
-       undesirable.
-       
-    ISO-Awareness:
-    Normalization factors are dynamic based on the ISO setting. High-ISO 
-    images are expected to have a higher noise floor.
-    
-    Ref: https://en.wikipedia.org/wiki/Color_noise
+    Estimates sensor noise levels using multi-patch variance analysis.
     """
     h, w = gray_img.shape
-    grid_size = 8  # 8x8 grid of patches
+    grid_size = 12 # Higher density for forensic mode
     patch_h, patch_w = h // grid_size, w // grid_size
     
     if patch_h < 10 or patch_w < 10:
@@ -803,78 +744,51 @@ def _calculate_noise(img: np.ndarray, gray_img: np.ndarray, metadata: dict = Non
     
     for i in range(grid_size):
         for j in range(grid_size):
-            # Luma Patch
             patch_gray = gray_img[i*patch_h:(i+1)*patch_h, j*patch_w:(j+1)*patch_w]
-            var_l = np.var(patch_gray)
-            luma_variances.append(var_l)
+            luma_variances.append(np.var(patch_gray))
             
-            # Chroma Patch (Convert to LAB)
-            # Optimization: Check if img is None (shouldn't happen in main flow)
             if img is not None:
                 patch_bgr = img[i*patch_h:(i+1)*patch_h, j*patch_w:(j+1)*patch_w]
                 if patch_bgr.size > 0:
                     try:
                         patch_lab = cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2Lab)
                         l_chan, a_chan, b_chan = cv2.split(patch_lab)
-                        var_a = np.var(a_chan)
-                        var_b = np.var(b_chan)
-                        chroma_variances.append(var_a + var_b)
-                    except:
-                        pass # Fallback if convert fails
+                        chroma_variances.append(np.var(a_chan) + np.var(b_chan))
+                    except: pass
             
-    # Heuristic: The "Noise Floor" is best estimated by the detected patches
-    # with the LOWEST variance (shadows/smooth walls).
     if not luma_variances:
         return 0.0, "Could not sample noise patches."
         
     luma_variances.sort()
     chroma_variances.sort()
     
-    cutoff_index = max(1, len(luma_variances) // 4)
-    noise_floor_luma = np.mean(luma_variances[:cutoff_index])
+    cutoff = max(1, len(luma_variances) // 5) # Use bottom 20% (smoothest patches)
+    noise_floor_luma = np.mean(luma_variances[:cutoff])
+    noise_floor_chroma = np.mean(chroma_variances[:max(1, len(chroma_variances)//5)]) if chroma_variances else 0.0
     
-    noise_floor_chroma = 0.0
-    if chroma_variances:
-        cutoff_chroma = max(1, len(chroma_variances) // 4)
-        noise_floor_chroma = np.mean(chroma_variances[:cutoff_chroma])
+    LUMA_NORM_BASE = 250.0 # Stricter normalization for forensic mode
+    CHROMA_NORM_BASE = 150.0 
     
-    # Normalization Constants (Tuned for 8-bit images, Variance)
-    # Base ISO 100 sensitivity (Variance 300 ~= StdDev 17.3, which is typical for "clean with texture")
-    LUMA_NORM_BASE = 300.0 
-    CHROMA_NORM_BASE = 200.0 
-    
-    iso = metadata.get("iso") if metadata else None
-    if iso:
-        # Scale with ISO (approx sqrt relationship for photon noise)
-        tolerance_factor = np.sqrt(max(iso, 100) / 100.0)
-        luma_norm = LUMA_NORM_BASE * tolerance_factor
-        chroma_norm = CHROMA_NORM_BASE * tolerance_factor
-    else:
-        luma_norm = LUMA_NORM_BASE * 2.0 
-        chroma_norm = CHROMA_NORM_BASE * 2.0
+    iso = (metadata.get("iso") if metadata else None) or 100
+    tolerance_factor = np.sqrt(max(float(iso), 100.0) / 100.0)
+    luma_norm = LUMA_NORM_BASE * tolerance_factor
+    chroma_norm = CHROMA_NORM_BASE * tolerance_factor
         
-    # Scores (0.0 = terrible noise, 1.0 = clean)
     luma_score = max(0.0, 1.0 - (noise_floor_luma / luma_norm))
     chroma_score = max(0.0, 1.0 - (noise_floor_chroma / chroma_norm))
     
-    # Combined Score: Bad Chroma drags score down more than Luma
-    if chroma_variances:
-        final_score = (luma_score * 0.6) + (chroma_score * 0.4)
-    else:
-        final_score = luma_score
-    
+    final_score = (luma_score * 0.5) + (chroma_score * 0.5) if chroma_variances else luma_score
     iso_str = f" (ISO {iso})" if iso else ""
     
-    if final_score > 0.8:
-        explanation = f"Minimal sensor noise detected{iso_str}."
-    elif chroma_score < 0.5:
-        explanation = f"Significant color noise (chroma blotches) detected{iso_str}."
-    elif luma_score < 0.5:
-        explanation = f"High levels of luminance grain{iso_str}."
+    if final_score > 0.85:
+        explanation = f"Clean image with minimal sensor noise{iso_str}."
+    elif chroma_score < 0.6:
+        explanation = f"Visible color noise detected in shadows{iso_str}."
     else:
-        explanation = f"Moderate noise visible{iso_str}."
+        explanation = f"Luminance grain detected{iso_str}."
         
     return float(final_score), explanation
+
 
 
 def _calculate_color_balance(img: np.ndarray) -> tuple[float, str]:
@@ -1436,52 +1350,102 @@ def evaluate_photo_quality(
     # --- Technical Core ---
     
     # Sharpness
-    sharpness_score = 1.0
+    sharpness_score = 0.0
+    sharpness_explanation = "Sharpness analysis failed."
     if "sharpness" in requested:
-        sharpness_score, sharpness_explanation = _calculate_sharpness(gray, metadata)
+        try:
+            sharpness_score, sharpness_explanation = _calculate_sharpness(gray, metadata)
+        except Exception as e:
+            logger.error(f"Sharpness calculation failed: {e}")
+            sharpness_score, sharpness_explanation = 0.0, f"Error: {str(e)}"
         results["sharpness"] = {"score": float(sharpness_score), "explanation": sharpness_explanation}
-    
+    else:
+        sharpness_score = 1.0 # Default if not requested
+
     # Focus (Uses shared detections)
-    focus_area_score = 1.0
+    focus_area_score = 0.0
+    focus_area_explanation = "Focus analysis failed."
     main_subject_name = "unknown"
     detected_object_names = []
     if "focus" in requested:
-        focus_area_score, focus_area_explanation, detected_object_names, main_subject_name = \
-            _calculate_focus_area(img, gray, sharpness_score, metadata, detections=detections)
+        try:
+            focus_area_score, focus_area_explanation, detected_object_names, main_subject_name = \
+                _calculate_focus_area(img, gray, sharpness_score, metadata, detections=detections)
+        except Exception as e:
+            logger.error(f"Focus calculation failed: {e}")
+            message = f"Error: {str(e)}"
+            focus_area_score, focus_area_explanation = 0.0, message
         results["focus"] = {"score": float(focus_area_score), "explanation": focus_area_explanation}
-    
+    else:
+        focus_area_score = 1.0
+
     # Exposure (Uses detections for Zone V logic)
-    exposure_score = 1.0
+    exposure_score = 0.0
+    exposure_explanation = "Exposure analysis failed."
     if "exposure" in requested:
-        exposure_score, exposure_explanation = _calculate_exposure(gray, metadata, detections=detections)
+        try:
+            exposure_score, exposure_explanation = _calculate_exposure(gray, metadata, detections=detections)
+        except Exception as e:
+            logger.error(f"Exposure calculation failed: {e}")
+            exposure_score, exposure_explanation = 0.0, f"Error: {str(e)}"
         results["exposure"] = {"score": float(exposure_score), "explanation": exposure_explanation}
+    else:
+        exposure_score = 1.0
         
     # Noise
-    noise_score = 1.0
+    noise_score = 0.0
+    noise_explanation = "Noise analysis failed."
     if "noise" in requested:
-        noise_score, noise_explanation = _calculate_noise(img, gray, metadata)
+        try:
+            noise_score, noise_explanation = _calculate_noise(img, gray, metadata)
+        except Exception as e:
+            logger.error(f"Noise calculation failed: {e}")
+            noise_score, noise_explanation = 0.0, f"Error: {str(e)}"
         results["noise"] = {"score": float(noise_score), "explanation": noise_explanation}
+    else:
+        noise_score = 1.0
 
     # --- Aesthetic Factors ---
     
     # Color Balance
-    color_balance_score = 1.0
+    color_balance_score = 0.0
+    color_balance_explanation = "Color analysis failed."
     if "color" in requested:
-        color_balance_score, color_balance_explanation = _calculate_color_balance(img)
+        try:
+            color_balance_score, color_balance_explanation = _calculate_color_balance(img)
+        except Exception as e:
+            logger.error(f"Color calculation failed: {e}")
+            color_balance_score, color_balance_explanation = 0.0, f"Error: {str(e)}"
         results["color"] = {"score": float(color_balance_score), "explanation": color_balance_explanation}
+    else:
+        color_balance_score = 1.0
         
     # Dynamic Range (New Tonal Utilization Logic)
-    dynamic_range_score = 1.0
+    dynamic_range_score = 0.0
+    dynamic_range_explanation = "Dynamic Range analysis failed."
     if "dynamicRange" in requested:
-        dynamic_range_score, dynamic_range_explanation = _calculate_dynamic_range(gray, metadata)
+        try:
+            dynamic_range_score, dynamic_range_explanation = _calculate_dynamic_range(gray, metadata)
+        except Exception as e:
+            logger.error(f"Dynamic Range calculation failed: {e}")
+            dynamic_range_score, dynamic_range_explanation = 0.0, f"Error: {str(e)}"
         results["dynamicRange"] = {"score": float(dynamic_range_score), "explanation": dynamic_range_explanation}
+    else:
+        dynamic_range_score = 1.0
         
     # Composition
-    composition_score = 1.0
+    composition_score = 0.0
+    composition_explanation = "Composition analysis failed."
     if "composition" in requested:
-        # Pass full detections (with 'name') for Headroom Analysis
-        composition_score, composition_explanation = _calculate_composition(img.shape, detections)
+        try:
+            # Pass full detections (with 'name') for Headroom Analysis
+            composition_score, composition_explanation = _calculate_composition(img.shape, detections)
+        except Exception as e:
+            logger.error(f"Composition calculation failed: {e}")
+            composition_score, composition_explanation = 0.5, f"Error: {str(e)}"
         results["composition"] = {"score": float(composition_score), "explanation": composition_explanation}
+    else:
+        composition_score = 1.0
 
     # 3. Composite Scoring (Technical Gatekeeper Math)
     # We use requested weights or default weights normalized
