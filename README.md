@@ -15,6 +15,28 @@ For developers or users who want the latest changes directly from the source:
 pip install git+https://github.com/prasadabhishek/photo-quality-analyzer.git
 ```
 
+---
+
+## What This Library Is (And Isn't)
+
+This library is a **Technical Quality Filter** ("Janitor"), not an artistic evaluator ("Curator").
+
+### ✅ What it WILL do:
+- Identify out-of-focus, underexposed, or noisy images
+- Filter out broken shots from large photo libraries (10,000+ images)
+- Provide objective technical metrics (sharpness, noise, dynamic range)
+- Normalize scores against known camera sensor physics
+
+### ❌ What it WON'T do:
+- Judge artistic merit or emotional impact
+- Understand intentional creative choices (low-key lighting, film grain, etc.)
+- Replace human curation for portfolio selection
+- Prefer "interesting" photos over "boring but technically perfect" ones
+
+**Use Case**: Wedding photographers culling 5,000 shots to eliminate camera-shake blurs and exposure failures—not fine art curation.
+
+---
+
 ## Metrics
 
 The engine evaluates technical quality through a multi-dimensional lens:

@@ -136,7 +136,39 @@ Final scores are mapped to a qualitative scale used in XMP sidecars and CLI outp
 
 ---
 
-## 6. Resources & References
+## 6. Known Limitations & Edge Cases
+
+This library is designed as a **Technical Quality Filter**, not an artistic curator. The following are documented limitations of the current methodology:
+
+### 6.1 Sharpness: Geometric Textures
+**Issue**: FFT anisotropy can misidentify sharp, directional textures (brick walls, fences) as motion blur.  
+**Mitigation**: The variance-based metric measures frequency spread, not just directionality, which reduces false positives.  
+**Future Enhancement**: Natural Scene Statistics (NSS) modeling to differentiate blur decay patterns from sharp geometric subjects. See [BACKLOG.md](BACKLOG.md#31-natural-scene-statistics-nss-for-sharpness).
+
+### 6.2 Exposure: Skin Tone Bias
+**Issue**: The Zone V (18% gray) target assumes uniform subject reflectance. Light skin tones (~36% reflectance) will be underexposed; dark skin tones (~12% reflectance) will be overexposed.  
+**Impact**: This is a **documented photographic bias** (see: Kodak Shirley Cards).  
+**Mitigation**: The library relies on EXIF metadata and global histograms to provide fallback guidance.  
+**Future Enhancement**: Adaptive skin tone estimation using the Monk Skin Tone Scale to set dynamic exposure targets. See [BACKLOG.md](BACKLOG.md#21-adaptive-skin-tone-exposure-targeting).
+
+### 6.3 Composition: Intentional Negative Space
+**Issue**: Environmental portraits with subjects occupying <5% of the frame (e.g., person at base of canyon) are penalized for "excessive headroom."  
+**Mitigation**: Headroom heuristics are disabled when subject area is <5% of the frame.  
+**Design Philosophy**: This is acceptable for a "Janitor" use case (culling accidental wide shots).
+
+### 6.4 Contrast: Bimodal Histograms
+**Issue**: Silhouette images (large peaks at black and white, nothing in mid-tones) score high on "dynamic range" despite lacking tonal detail.  
+**Rationale**: The library measures "tonal range utilization," not "tonal distribution uniformity."  
+**Future Enhancement**: Histogram flatness metric to penalize bimodal distributions. See [BACKLOG.md](BACKLOG.md#12-histogram-uniformity-flatness-metric).
+
+### 6.5 Overall Score: Technically Perfect, Visually Boring
+**Issue**: A sharp photo of a blank wall can score 0.8 (Excellent) because technical scores dominate the formula.  
+**Design Philosophy**: This is **acceptable** for a "Janitor." The library does not measure "interestingness."  
+**Future Enhancement**: Content saliency checks to penalize featureless images. See [BACKLOG.md](BACKLOG.md#11-content-saliency-check).
+
+---
+
+## 7. Resources & References
 - **Optical Theory**: [Cambridge in Colour](https://www.cambridgeincolour.com/)
 - **Sensor Benchmarks**: [DXOMARK](https://www.dxomark.com/)
 - **Dynamic Range Curves**: [PhotonsToPhotos](https://www.photonstophotos.net/)

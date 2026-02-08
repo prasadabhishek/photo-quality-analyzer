@@ -2,6 +2,8 @@
 
 This document outlines the public API of the `photo-quality-analyzer` package.
 
+> **Note**: This library measures **technical execution** (sharpness, exposure, noise), not artistic merit. Scores indicate whether an image is free from technical defects, not whether it is "interesting" or "beautiful." See [README.md](../README.md#what-this-library-is-and-isnt) for the design philosophy.
+
 ---
 
 ## 📦 Core Module
