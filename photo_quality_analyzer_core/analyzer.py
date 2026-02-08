@@ -382,9 +382,9 @@ def load_yolo_model_and_names(model_path: str, coco_names_file_path: str, engine
         logger.error("Please ensure that:")
         logger.error(
             "  1. If using a standard model name (e.g., 'yolov8n.pt'), your internet connection is active for the first download.")
-        logger.error(f"  2. If '{model_path}' is a file path (like the default '{YOLO_MODEL_PATH_DEFAULT}'), it points to a valid and readable .pt model file in the expected location (e.g., same directory as the script).")
+        logger.error(f"  2. If '{model_path}' is a file path (like the default '{YOLO_MODEL_PATH_DEFAULT}'), it points to a valid and readable .onnx model file in the expected location.")
         logger.error(
-            "  3. The 'ultralytics' package is correctly installed and up to date.")
+            "  3. The 'onnxruntime' package is correctly installed.")
 
     return loaded_model, loaded_coco_names
 
@@ -401,8 +401,7 @@ def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> N
     
     # Map friendly names to model files
     model_map = {
-        "nano": "yolo11n.pt",
-        "xlarge": "yolo12x.pt"
+        "nano": "yolo11n.onnx"
     }
     
     # If model_size ends with .pt or .onnx, assume it's a direct path
@@ -410,7 +409,7 @@ def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> N
         requested_model = model_size
     else:
         # Try finding in local resources/models folder first (standard cleanup structure)
-        model_filename = model_map.get(model_size.lower(), "yolo11n.pt")
+        model_filename = model_map.get(model_size.lower(), "yolo11n.onnx")
         local_resource_path = os.path.join(os.getcwd(), "resources", "models", model_filename)
         
         if os.path.exists(local_resource_path):
@@ -766,8 +765,8 @@ def _calculate_noise(img: np.ndarray, gray_img: np.ndarray, metadata: dict = Non
     
     iso = (metadata.get("iso") if metadata else None) or 100
     tolerance_factor = np.sqrt(max(float(iso), 100.0) / 100.0)
-    luma_norm = LUMA_NORM_BASE * tolerance_factor
-    chroma_norm = CHROMA_NORM_BASE * tolerance_factor
+    luma_norm = NOISE_NORMALIZATION_FACTOR * tolerance_factor
+    chroma_norm = (NOISE_NORMALIZATION_FACTOR * 0.6) * tolerance_factor
         
     luma_score = max(0.0, 1.0 - (noise_floor_luma / luma_norm))
     chroma_score = max(0.0, 1.0 - (noise_floor_chroma / chroma_norm))
