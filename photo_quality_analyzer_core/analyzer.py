@@ -119,7 +119,7 @@ def load_config(config_file_path: str = CONFIG_FILE_PATH) -> dict:
             'YOLO_NMS_THRESHOLD': config.getfloat('Thresholds', 'yolo_nms', fallback=0.45),
             'OVERALL_CONF_TECH_WEIGHT': config.getfloat('Weights', 'overall_tech', fallback=0.6),
             'OVERALL_CONF_OTHER_WEIGHT': config.getfloat('Weights', 'overall_other', fallback=0.4),
-            'YOLO_MODEL_PATH_DEFAULT': config.get('Models', 'default_yolo_model', fallback="yolo11n.pt"),
+            'YOLO_MODEL_PATH_DEFAULT': config.get('Models', 'default_yolo_model', fallback="yolo26n.onnx"),
             'JUDGEMENT_EXCELLENT': config.getfloat('JudgementLevels', 'excellent', fallback=0.9),
             'JUDGEMENT_GOOD': config.getfloat('JudgementLevels', 'good', fallback=0.7),
             'JUDGEMENT_FAIR': config.getfloat('JudgementLevels', 'fair', fallback=0.5),
@@ -140,7 +140,7 @@ YOLO_CONFIDENCE_THRESHOLD = _cfg.get('YOLO_CONFIDENCE_THRESHOLD', 0.5)
 YOLO_NMS_THRESHOLD = _cfg.get('YOLO_NMS_THRESHOLD', 0.45)
 OVERALL_CONF_TECH_WEIGHT = _cfg.get('OVERALL_CONF_TECH_WEIGHT', 0.6)
 OVERALL_CONF_OTHER_WEIGHT = _cfg.get('OVERALL_CONF_OTHER_WEIGHT', 0.4)
-YOLO_MODEL_PATH_DEFAULT = _cfg.get('YOLO_MODEL_PATH_DEFAULT', "yolo11n.onnx")
+YOLO_MODEL_PATH_DEFAULT = _cfg.get('YOLO_MODEL_PATH_DEFAULT', "yolo26n.onnx")
 JUDGEMENT_EXCELLENT = _cfg.get('JUDGEMENT_EXCELLENT', 0.9)
 JUDGEMENT_GOOD = _cfg.get('JUDGEMENT_GOOD', 0.7)
 JUDGEMENT_FAIR = _cfg.get('JUDGEMENT_FAIR', 0.5)
@@ -401,7 +401,8 @@ def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> N
     
     # Map friendly names to model files
     model_map = {
-        "nano": "yolo11n.onnx"
+        "nano": "yolo26n.onnx",
+        "yolo11": "yolo11n.onnx"
     }
     
     # If model_size ends with .pt or .onnx, assume it's a direct path
@@ -409,7 +410,7 @@ def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> N
         requested_model = model_size
     else:
         # Try finding in local resources/models or package resources
-        model_filename = model_map.get(model_size.lower(), "yolo11n.onnx")
+        model_filename = model_map.get(model_size.lower(), "yolo26n.onnx")
         pkg_resource_path = os.path.join(PACKAGE_DIR, "resources", "models", model_filename)
         local_resource_path = os.path.join(os.getcwd(), "resources", "models", model_filename)
         
@@ -1270,46 +1271,29 @@ def _detect_objects(img: np.ndarray) -> list[dict]:
         input_name = g_yolo_model.get_inputs()[0].name
         outputs = g_yolo_model.run(None, {input_name: input_tensor})
         
-        # YOLOv11 output is (1, 84, 8400)
-        output = outputs[0][0]
-        output = output.transpose() # (8400, 84)
-        
-        boxes = []
-        confs = []
-        class_ids = []
+        # YOLO26 output is (1, 300, 6) -> [x1, y1, x2, y2, score, class]
+        # It is NMS-free, so we just iterate and threshold
+        output = outputs[0][0] # (300, 6)
         
         for i in range(output.shape[0]):
-            classes_scores = output[i][4:]
-            max_score = np.max(classes_scores)
+            x1, y1, x2, y2, score, class_id = output[i]
             
-            if max_score > YOLO_CONFIDENCE_THRESHOLD:
-                conf = max_score
-                class_id = np.argmax(classes_scores)
+            if score > YOLO_CONFIDENCE_THRESHOLD:
+                # Rescale coordinates to original image size
+                x1 *= (img_w / input_size)
+                y1 *= (img_h / input_size)
+                x2 *= (img_w / input_size)
+                y2 *= (img_h / input_size)
                 
-                # Box coordinates: [x_center, y_center, width, height]
-                cx, cy, w, h = output[i][:4]
+                class_id = int(class_id)
+                name = g_coco_names[class_id] if g_coco_names and class_id < len(g_coco_names) else f"obj_{class_id}"
                 
-                # Convert to [x1, y1, x2, y2] and rescale
-                x1 = (cx - w/2) * (img_w / input_size)
-                y1 = (cy - h/2) * (img_h / input_size)
-                x2 = (cx + w/2) * (img_w / input_size)
-                y2 = (cy + h/2) * (img_h / input_size)
-                
-                boxes.append([x1, y1, x2, y2])
-                confs.append(float(conf))
-                class_ids.append(int(class_id))
-        
-        # Non-Maximum Suppression (NumPy Implementation)
-        indices = _nms(np.array(boxes), np.array(confs), YOLO_NMS_THRESHOLD)
-        
-        for i in indices:
-            name = g_coco_names[class_ids[i]] if g_coco_names and class_ids[i] < len(g_coco_names) else f"obj_{class_ids[i]}"
-            detections.append({
-                'box': boxes[i],
-                'class_id': class_ids[i],
-                'conf': confs[i],
-                'name': name
-            })
+                detections.append({
+                    'box': [float(x1), float(y1), float(x2), float(y2)],
+                    'class_id': class_id,
+                    'conf': float(score),
+                    'name': name
+                })
                     
     except Exception as e:
         logger.error(f"ONNX YOLO detection failed: {e}")

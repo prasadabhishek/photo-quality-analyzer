@@ -117,14 +117,12 @@ class TestPhase2Metrics(unittest.TestCase):
                     custom_metadata_map = {'names': "{0: 'person'}"}
                 return Meta()
             def run(self, output_names, input_feed):
-                # Return mock YOLOv11 output (1, 84, 8400)
-                # 84 = 4 boxes + 80 classes
-                # We need one detection for 'person' (index 0)
-                output = np.zeros((1, 84, 8400), dtype=np.float32)
-                # Set box for person at index 0 (cx, cy, w, h)
-                output[0, :4, 0] = [320, 320, 100, 100]
-                # Set confidence for person (index 0 + 4 = 4)
-                output[0, 4, 0] = 0.9
+                # Return mock YOLO26 output (1, 300, 6)
+                # [x1, y1, x2, y2, score, class]
+                output = np.zeros((1, 300, 6), dtype=np.float32)
+                # Set box for person at index 0 (x1, y1, x2, y2, score, class)
+                # Input size is 640x640
+                output[0, 0, :] = [100, 100, 200, 200, 0.9, 0]
                 return [output]
 
         analyzer.g_yolo_model = MockModel()

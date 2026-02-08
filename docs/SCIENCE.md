@@ -10,7 +10,7 @@ The engine follows a structured pipeline to transform raw pixel data into human-
 
 1.  **Ingestion**: Format detection and high-fidelity loading (RAW/JPEG).
 2.  **Context Extraction**: EXIF parsing for hardware metadata (Aperture, ISO, Model).
-3.  **Neural Detection**: YOLOv11 subject identification and ROI definition.
+3.  **Neural Detection**: **YOLO26** subject identification and ROI definition via **ONNX Runtime**.
 4.  **Signal Analysis**: Parallel computation of frequency, tonal, and statistical metrics.
 5.  **Normalization**: Benchmarking results against a database of **147+ camera models**.
 6.  **Synthesis**: Weighted averaging and linguistic mapping to final labels.
@@ -84,12 +84,13 @@ For professional photographers, the ability to analyze RAW files directly is cri
 
 ## 4. Visual Intelligence & Neural ROI
 
-### YOLOv11 Object Detection
+### YOLO26 Object Detection
 
 **ELI5**: If you take a picture of a dog, the dog should be sharp, but it's often okay (or even preferred) if the trees behind it are blurry. The engine identifies the main subject so it can judge the focus where it matters most.
 
 1.  **ROI Masking**: Instead of grading global sharpness, the engine prioritizes the bounding box of the main subject.
-2.  **Intent Check**: If the subject is sharp but the background has "bokeh" (intentional blur), the engine recognizes this as a stylistic choice rather than a technical failure.
+2.  **NMS-Free Architecture**: Unlike previous versions, YOLO26 uses an end-to-end NMS-free transformer design. This eliminates the post-processing "cleanup" step, reducing latency by up to 43% on standard CPUs.
+3.  **Intent Check**: If the subject is sharp but the background has "bokeh" (intentional blur), the engine recognizes this as a stylistic choice rather than a technical failure.
 
 ### Composition: Headroom Analysis
 The engine uses psychophysical heuristics to evaluate framing for portraits:

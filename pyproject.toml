@@ -32,7 +32,6 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["unittest"]
-nas = ["super-gradients>=3.7.1"]
 
 [tool.setuptools]
 packages = ["photo_quality_analyzer_core"]

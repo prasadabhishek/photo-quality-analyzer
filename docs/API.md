@@ -22,8 +22,8 @@ def evaluate_photo_quality(
 **Parameters**:
 - `image_path` (str): Path to the target image (JPEG, PNG, RAW).
 - `requested_metrics` (list[str], optional): List of metrics to calculate (e.g., `["sharpness", "exposure"]`). Defaults to `"all"`.
-- `enable_subject_detection` (bool): If `True`, runs YOLOv11 for ROI-based analysis. Defaults to `True`.
-- `model_size` (str): YOLO model size (`"nano"` or `"xlarge"`). Defaults to `"nano"`.
+- `enable_subject_detection` (bool): If `True`, runs YOLO26 for ROI-based analysis. Defaults to `True`.
+- `model_size` (str): YOLO model size (`"nano"`). Defaults to `"nano"`.
 
 **Returns**:
 A `dict` with the following schema:

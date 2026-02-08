@@ -59,8 +59,14 @@ The engine uses a hybrid approach to distinguish between artistic intent and tec
 
 1.  **FFT Anisotropy**: Measures purely optical acutance, invariant to rotation. Adjusted for **Aperture-aware diffraction**.
 2.  **Zone System Histogram**: Analyzes luminance using Ansel Adams' Zone System to detect destructive clipping.
-3.  **Neural ROI**: Leverages **YOLOv11** to identify main subjects, ensuring metrics are calculated on the subject rather than the background.
+3.  **Neural ROI (YOLO26)**: Leverages the latest **YOLO26** (January 2026 release) via **ONNX Runtime** to identify main subjects, ensuring metrics are calculated on the subject rather than the background.
 4.  **Sensor Normalization**: Benchmarks images against the known limits of the specific camera sensor (Full Frame vs APS-C vs 1-inch).
+
+## Technology Stack
+
+- **[ONNX Runtime](https://github.com/microsoft/onnxruntime)**: Optimized, lightweight inference engine (replaced PyTorch).
+- **[YOLO26](https://github.com/ultralytics/ultralytics)**: Transformer-based subject detection (43% faster on CPUs).
+- **OpenCV (Headless)**: Efficient image processing without GUI overhead.
 
 ### `evaluate_photo_quality(file_path, ...)`
 The primary entry point. It returns a dictionary containing scores, qualitative labels, and AI-generated scene descriptions.
