@@ -15,6 +15,20 @@ The engine follows a structured pipeline to transform raw pixel data into human-
 5.  **Normalization**: Benchmarking results against a database of **147+ camera models**.
 6.  **Synthesis**: Weighted averaging and linguistic mapping to final labels.
 
+```mermaid
+graph TD
+    A["Image Ingestion (RAW/JPEG)"] --> B["Context Extraction (EXIF Parsing)"]
+    B --> C["Neural Object Detection (YOLO26 ONNX)"]
+    C --> D{"Subject Found?"}
+    D -- Yes --> E["Subject-Aware ROI Metrics"]
+    D -- No --> F["Global Technical Metrics"]
+    E --> G["Signal Analysis (FFT, Zone V, Noise Sample)"]
+    F --> G
+    G --> H["Sensor Normalization (147+ Models)"]
+    H --> I["Judgement Synthesis (Weighted Fusion)"]
+    I --> J["Final Report & XMP Sidecar"]
+```
+
 ---
 
 ## 2. Ingestion & RAW Pipeline

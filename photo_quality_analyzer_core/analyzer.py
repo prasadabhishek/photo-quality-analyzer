@@ -1534,6 +1534,7 @@ def evaluate_photo_quality(
         "judgement": judgement,
         "judgementDescription": judgement_description,
         "description": image_description,
+        "detectedObjects": detected_object_names,
         "metrics": results,
         "cameraInfo": {
             "make": metadata.get("make"),
@@ -1555,6 +1556,35 @@ def evaluate_photo_quality(
     gc.collect()
     
     return report
+
+
+def detect_objects(image_path: str, model_size: str = "nano") -> list[str]:
+    """
+    Stand-alone scene intelligence: Returns a unique list of detected labels.
+    
+    This is an optimized entry point for users who only need to know 'what' 
+    is in the image without running full technical quality assessments.
+    """
+    img = _load_image_with_raw_support(image_path)
+    if img is None:
+        raise ValueError(f"Failed to load image: {image_path}")
+    
+    ensure_yolo_initialized(model_size=model_size)
+    detections = _detect_objects(img)
+    
+    # Extract unique names from detections (list of dicts)
+    detected_names = []
+    for d in detections:
+        name = d.get('name')
+        if name and name not in detected_names:
+            detected_names.append(name)
+                    
+    # Aggressive memory cleanup
+    del img
+    del detections
+    gc.collect()
+    
+    return detected_names
 
 
 # --- File Processing Function ---

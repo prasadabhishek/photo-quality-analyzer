@@ -17,7 +17,20 @@ result = evaluate_photo_quality("my_photo.jpg")
 # Print the final verdict
 print(f"Judgement: {result['judgement']}")
 print(f"Confidence: {result['overallConfidence']:.2f}")
+print(f"Detected: {', '.join(result['detectedObjects'])}")
 print(f"AI Description: {result['description']}")
+```
+
+### B. High-Level Scene Intelligence
+
+If you only need to know "what" is in the photo without the technical quality audit:
+
+```python
+from photo_quality_analyzer_core.analyzer import detect_objects
+
+# Returns list[str]: ["person", "dog", "mountain"]
+objects = detect_objects("my_photo.jpg")
+print(f"This image contains: {objects}")
 ```
 
 ---

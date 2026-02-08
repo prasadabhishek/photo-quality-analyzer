@@ -17,6 +17,17 @@ def evaluate_photo_quality(
     enable_subject_detection: bool = True,
     model_size: str = "nano"
 ) -> dict
+
+### `detect_objects`
+
+A dedicated entry point for high-level scene intelligence. Returns only a clean list of unique object labels found in the image.
+
+```python
+def detect_objects(
+    image_path: str,
+    model_size: str = "nano"
+) -> list[str]
+```
 ```
 
 **Parameters**:
@@ -35,6 +46,7 @@ A `dict` with the following schema:
   "judgement": string,          // "Excellent", "Good", "Fair", "Poor"
   "judgementDescription": str,  // Paragraph explaining the score
   "description": string,        // AI summary of scene content
+  "detectedObjects": list[str], // Clean list of object labels (e.g. ["person", "dog"])
   "metrics": {                  // Detailed breakdown
      "sharpness": { "score": float, "explanation": str },
      "exposure": { "score": float, "explanation": str },
