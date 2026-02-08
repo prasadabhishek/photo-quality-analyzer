@@ -13,13 +13,11 @@ Scientific Foundation:
 Sources:
 - DXOMARK: https://www.dxomark.com/ (Sensor Benchmarks)
 - Photons to Photos: https://www.photonstophotos.net/ (Dynamic Range Curves)
-- Cambridge in Colour: https://www.cambridgeincolour.com/ (Optical Theory)
 """
 try:
     import cv2
     import numpy as np
-    import torch
-    from ultralytics import YOLO, NAS
+    import onnxruntime as ort
     from tqdm import tqdm
     import exifread
     try:
@@ -43,7 +41,7 @@ except ImportError as e:
     print("One or more required Python packages are not installed.")
     print("Please install the necessary dependencies by running:")
     print("pip install -r requirements.txt")
-    print("If you don't have 'requirements.txt', ensure you have opencv-python, numpy, ultralytics, exifread, and scipy installed.")
+    print("If you don't have 'requirements.txt', ensure you have opencv-python-headless, numpy, onnxruntime, exifread, and scipy installed.")
     exit(1)
 
 # --- Standard Library Imports ---
@@ -80,6 +78,13 @@ def find_config(filename: str = DEFAULT_CONFIG_NAME) -> str | None:
     This ensures that users can customize normalization factors without
     modifying the core library.
     """
+    cwd_path = os.path.join(os.getcwd(), filename)
+    if os.path.exists(cwd_path):
+        return cwd_path
+    pkg_path = os.path.join(PACKAGE_DIR, filename)
+    if os.path.exists(pkg_path):
+        return pkg_path
+    return None
 
 CONFIG_FILE_PATH = find_config() or DEFAULT_CONFIG_NAME
 
@@ -135,7 +140,7 @@ YOLO_CONFIDENCE_THRESHOLD = _cfg.get('YOLO_CONFIDENCE_THRESHOLD', 0.5)
 YOLO_NMS_THRESHOLD = _cfg.get('YOLO_NMS_THRESHOLD', 0.45)
 OVERALL_CONF_TECH_WEIGHT = _cfg.get('OVERALL_CONF_TECH_WEIGHT', 0.6)
 OVERALL_CONF_OTHER_WEIGHT = _cfg.get('OVERALL_CONF_OTHER_WEIGHT', 0.4)
-YOLO_MODEL_PATH_DEFAULT = _cfg.get('YOLO_MODEL_PATH_DEFAULT', "yolo11n.pt")
+YOLO_MODEL_PATH_DEFAULT = _cfg.get('YOLO_MODEL_PATH_DEFAULT', "yolo11n.onnx")
 JUDGEMENT_EXCELLENT = _cfg.get('JUDGEMENT_EXCELLENT', 0.9)
 JUDGEMENT_GOOD = _cfg.get('JUDGEMENT_GOOD', 0.7)
 JUDGEMENT_FAIR = _cfg.get('JUDGEMENT_FAIR', 0.5)
@@ -328,42 +333,32 @@ def load_yolo_model_and_names(model_path: str, coco_names_file_path: str, engine
         # Ultralytics' YOLO() constructor will:
         # 1. Attempt to download if 'model_path' is a recognized model name (e.g., "yolov8n.pt").
         # 2. Attempt to load from disk if 'model_path' is a file path (e.g., "./yolo11n.pt").
-        if engine == "yolo-nas":
-            try:
-                loaded_model = NAS(model_path)
-                logger.info(f"Successfully loaded YOLO-NAS model: {model_path}")
-            except (ImportError, ModuleNotFoundError) as e_nas:
-                logger.error(f"YOLO-NAS engine requires 'super-gradients' library.")
-                logger.error("Please run: pip install super-gradients")
-                raise ImportError("Missing dependency for YOLO-NAS.") from e_nas
-            except Exception as e:
-                logger.error(f"Failed to load YOLO-NAS model: {e}")
-                raise e
-        else:
-            loaded_model = YOLO(model_path)
-            logger.info(
-                f"Successfully loaded/initialized YOLO model using '{model_path}'.")
+        if str(model_path).endswith(".pt"):
+            logger.warning("Attempting to load a .pt model with ONNX engine. This is deprecated.")
+            # Fallback to model name if provided as path
+            if os.path.exists(model_path.replace(".pt", ".onnx")):
+                model_path = model_path.replace(".pt", ".onnx")
+
+        loaded_model = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+        logger.info(f"Successfully loaded YOLO ONNX model: {model_path}")
 
         # Try to get names from the model itself (logic remains the same)
 
-        # Try to get names from the model itself
-        if hasattr(loaded_model, 'names') and isinstance(loaded_model.names, dict) and loaded_model.names:
-            if all(isinstance(k, int) for k in loaded_model.names.keys()):
-                max_id = -1
-                if loaded_model.names:
-                    max_id = max(loaded_model.names.keys())
-                if max_id != -1:
-                    _coco_names_list = [
-                        f"unknown_id_{i}" for i in range(max_id + 1)]
-                    for class_id_int, name_str in loaded_model.names.items():
-                        _coco_names_list[class_id_int] = name_str
-                    loaded_coco_names = _coco_names_list
-                    logger.info("Loaded class names from YOLO model.")
-                # else: loaded_coco_names remains None
-            # else: loaded_coco_names remains None
-            if loaded_coco_names is None:
-                logger.warning(
-                    "YOLO model.names format not as expected or empty.")
+        # ONNX models don't always embed names, but we can try to extract from metadata
+        meta = loaded_model.get_modelmeta().custom_metadata_map
+        if 'names' in meta:
+            try:
+                import ast
+                loaded_coco_names = ast.literal_eval(meta['names'])
+                if isinstance(loaded_coco_names, dict):
+                    # Convert dict to list
+                    max_id = max(loaded_coco_names.keys())
+                    names_list = ["unknown"] * (max_id + 1)
+                    for k, v in loaded_coco_names.items():
+                        names_list[int(k)] = v
+                    loaded_coco_names = names_list
+            except Exception as e:
+                logger.warning(f"Failed to parse class names from ONNX metadata: {e}")
 
         if loaded_coco_names is None:
             logger.critical(
@@ -410,8 +405,8 @@ def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> N
         "xlarge": "yolo12x.pt"
     }
     
-    # If model_size ends with .pt, assume it's a direct path
-    if model_size.lower().endswith(".pt"):
+    # If model_size ends with .pt or .onnx, assume it's a direct path
+    if model_size.lower().endswith(".pt") or model_size.lower().endswith(".onnx"):
         requested_model = model_size
     else:
         # Try finding in local resources/models folder first (standard cleanup structure)
@@ -1247,8 +1242,7 @@ def create_xmp_sidecar(image_path: str, status: str, confidence: float) -> None:
 
 def _detect_objects(img: np.ndarray) -> list[dict]:
     """
-    Runs YOLO detection and returns a standardized list of detections.
-    Returns: [{'box': [x1, y1, x2, y2], 'class_id': int, 'conf': float, 'name': str}, ...]
+    Runs YOLO detection using ONNX Runtime and returns a standardized list of detections.
     """
     global g_yolo_model, g_coco_names
     detections = []
@@ -1256,41 +1250,106 @@ def _detect_objects(img: np.ndarray) -> list[dict]:
         return detections
         
     try:
-        # Run inference with memory safety
-        with torch.inference_mode():
-            results = g_yolo_model.predict(
-                source=img, 
-                conf=YOLO_CONFIDENCE_THRESHOLD, 
-                iou=YOLO_NMS_THRESHOLD, 
-                verbose=False
-            )
+        # Preprocessing: Resize and Normalize
+        img_h, img_w = img.shape[:2]
+        input_size = 640
+        
+        # Resize maintaining aspect ratio (padding might be needed for strict accuracy, 
+        # but simple resize is often okay for quality gating)
+        input_img = cv2.resize(img, (input_size, input_size))
+        input_img = input_img.astype(np.float32) / 255.0
+        
+        # HWC -> BCHW
+        input_img = input_img.transpose(2, 0, 1)
+        input_tensor = input_img[np.newaxis, :, :, :]
+        
+        # Run inference
+        input_name = g_yolo_model.get_inputs()[0].name
+        outputs = g_yolo_model.run(None, {input_name: input_tensor})
+        
+        # YOLOv11 output is (1, 84, 8400)
+        output = outputs[0][0]
+        output = output.transpose() # (8400, 84)
+        
+        boxes = []
+        confs = []
+        class_ids = []
+        
+        for i in range(output.shape[0]):
+            classes_scores = output[i][4:]
+            max_score = np.max(classes_scores)
             
-            if results and results[0].boxes:
-                result = results[0]
-                boxes = result.boxes.xyxy.cpu().numpy()
-                confs = result.boxes.conf.cpu().numpy()
-                classes = result.boxes.cls.cpu().numpy().astype(int)
+            if max_score > YOLO_CONFIDENCE_THRESHOLD:
+                conf = max_score
+                class_id = np.argmax(classes_scores)
                 
-                for i in range(len(boxes)):
-                    name = g_coco_names[classes[i]] if g_coco_names and classes[i] < len(g_coco_names) else f"obj_{classes[i]}"
-                    detections.append({
-                        'box': boxes[i].tolist(),
-                        'class_id': int(classes[i]),
-                        'conf': float(confs[i]),
-                        'name': name
-                    })
+                # Box coordinates: [x_center, y_center, width, height]
+                cx, cy, w, h = output[i][:4]
                 
-                # Cleanup results explicitly
-                del results
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                elif hasattr(torch, "mps") and torch.backends.mps.is_available():
-                    torch.mps.empty_cache()
+                # Convert to [x1, y1, x2, y2] and rescale
+                x1 = (cx - w/2) * (img_w / input_size)
+                y1 = (cy - h/2) * (img_h / input_size)
+                x2 = (cx + w/2) * (img_w / input_size)
+                y2 = (cy + h/2) * (img_h / input_size)
+                
+                boxes.append([x1, y1, x2, y2])
+                confs.append(float(conf))
+                class_ids.append(int(class_id))
+        
+        # Non-Maximum Suppression (NumPy Implementation)
+        indices = _nms(np.array(boxes), np.array(confs), YOLO_NMS_THRESHOLD)
+        
+        for i in indices:
+            name = g_coco_names[class_ids[i]] if g_coco_names and class_ids[i] < len(g_coco_names) else f"obj_{class_ids[i]}"
+            detections.append({
+                'box': boxes[i],
+                'class_id': class_ids[i],
+                'conf': confs[i],
+                'name': name
+            })
                     
     except Exception as e:
-        logger.error(f"YOLO detection failed: {e}")
+        logger.error(f"ONNX YOLO detection failed: {e}")
         
     return detections
+
+def _nms(boxes, scores, iou_threshold):
+    """
+    Pure NumPy Non-Maximum Suppression.
+    """
+    if len(boxes) == 0:
+        return []
+
+    x1 = boxes[:, 0]
+    y1 = boxes[:, 1]
+    x2 = boxes[:, 2]
+    y2 = boxes[:, 3]
+
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort()[::-1]
+
+    keep = []
+    while order.size > 0:
+        i = order[0]
+        keep.append(i)
+        
+        if order.size == 1:
+            break
+
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+
+        w = np.maximum(0.0, xx2 - xx1)
+        h = np.maximum(0.0, yy2 - yy1)
+        inter = w * h
+        
+        ovr = inter / (areas[i] + areas[order[1:]] - inter)
+        inds = np.where(ovr <= iou_threshold)[0]
+        order = order[inds + 1]
+
+    return keep
 
 
 def evaluate_photo_quality(
@@ -1667,7 +1726,7 @@ def main() -> None:
         "--model_path",
         type=str,
         default=YOLO_MODEL_PATH_DEFAULT,
-        help=f"Path to the YOLO model file (e.g., yolov11n.pt, yolov8n.pt). Default: {YOLO_MODEL_PATH_DEFAULT}"
+        help=f"Path to the YOLO ONNX model file (e.g., yolo11n.onnx). Default: {YOLO_MODEL_PATH_DEFAULT}"
     )
     parser.add_argument(
         "--min_conf",
@@ -1678,9 +1737,9 @@ def main() -> None:
     parser.add_argument(
         "--engine",
         type=str,
-        choices=["yolo", "yolo-nas"],
-        default="yolo",
-        help="Inference engine to use. 'yolo' for Ultralytics YOLO, 'yolo-nas' for Ultralytics NAS."
+        choices=["onnx"],
+        default="onnx",
+        help="Inference engine to use. 'onnx' for ONNX Runtime (CPU)."
     )
     args = parser.parse_args()
 
