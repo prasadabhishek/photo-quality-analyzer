@@ -18,6 +18,7 @@ Sources:
 try:
     import cv2
     import numpy as np
+    import torch
     from ultralytics import YOLO, NAS
     from tqdm import tqdm
     import exifread
@@ -25,8 +26,12 @@ try:
         import rawpy
     except ImportError:
         rawpy = None
-    from scipy.fftpack import fft2, fftshift
+    try:
+        from scipy.fft import fft2, fftshift
+    except ImportError:
+        from scipy.fftpack import fft2, fftshift
     from scipy.stats import entropy
+    import gc
     from .context_helpers import (
         adjust_sharpness_for_aperture,
         get_camera_dynamic_range_baseline,
@@ -404,7 +409,19 @@ def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> N
         "nano": "yolo11n.pt",
         "xlarge": "yolo12x.pt"
     }
-    requested_model = model_map.get(model_size.lower(), "yolo11n.pt")
+    
+    # If model_size ends with .pt, assume it's a direct path
+    if model_size.lower().endswith(".pt"):
+        requested_model = model_size
+    else:
+        # Try finding in local resources/models folder first (standard cleanup structure)
+        model_filename = model_map.get(model_size.lower(), "yolo11n.pt")
+        local_resource_path = os.path.join(os.getcwd(), "resources", "models", model_filename)
+        
+        if os.path.exists(local_resource_path):
+            requested_model = local_resource_path
+        else:
+            requested_model = model_filename
     
     # If the model is already loaded and matches the requested size, skip
     # (Note: g_yolo_model.model_name might differ if path is used, so we check the active config)
@@ -432,6 +449,9 @@ def _extract_metadata(image_path: str) -> dict:
         "shutter_speed": None,
         "iso": None,
         "aperture": None,
+        "make": None,
+        "model": None,
+        "lens": None,
         "status": "missing"
     }
     try:
@@ -440,17 +460,35 @@ def _extract_metadata(image_path: str) -> dict:
             
             # Shutter Speed
             if 'EXIF ExposureTime' in tags:
-                metadata["shutter_speed"] = float(tags['EXIF ExposureTime'].values[0])
+                try:
+                    metadata["shutter_speed"] = float(tags['EXIF ExposureTime'].values[0])
+                except (ValueError, IndexError, TypeError): pass
             
             # ISO
             if 'EXIF ISOSpeedRatings' in tags:
-                metadata["iso"] = int(tags['EXIF ISOSpeedRatings'].values[0])
+                try:
+                    metadata["iso"] = int(tags['EXIF ISOSpeedRatings'].values[0])
+                except (ValueError, IndexError, TypeError): pass
             
             # Aperture
             if 'EXIF FNumber' in tags:
-                metadata["aperture"] = float(tags['EXIF FNumber'].values[0])
+                try:
+                    metadata["aperture"] = float(tags['EXIF FNumber'].values[0])
+                except (ValueError, IndexError, TypeError): pass
+
+            # Camera Make/Model
+            if 'Image Make' in tags:
+                metadata["make"] = str(tags['Image Make'].values).strip()
+            if 'Image Model' in tags:
+                metadata["model"] = str(tags['Image Model'].values).strip()
             
-            if metadata["shutter_speed"] or metadata["iso"] or metadata["aperture"]:
+            # Lens Model
+            if 'EXIF LensModel' in tags:
+                metadata["lens"] = str(tags['EXIF LensModel'].values).strip()
+            elif 'MAKERNOTE LensModel' in tags:
+                metadata["lens"] = str(tags['MAKERNOTE LensModel'].values).strip()
+            
+            if metadata["shutter_speed"] or metadata["iso"] or metadata["aperture"] or metadata["model"]:
                 metadata["status"] = "present"
     except Exception as e:
         logger.warning(f"Could not extract EXIF from {image_path}: {e}")
@@ -481,52 +519,66 @@ def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None) -> tuple[f
     f_shift = fftshift(f_transform)
     magnitude_spectrum = np.abs(f_shift)
     
+    # Cleanup transform arrays immediately
+    del f_transform
+    del f_shift
+    
     h, w = gray_img.shape
-    cy, cx = h // 2, w // 2
+    cy, cx = h / 2.0, w / 2.0
     
     # Analyze High-Frequency Band
-    r_outer = int(min(h, w) * 0.4)
-    r_inner = int(min(h, w) * 0.1)
+    r_outer = min(h, w) * 0.4
+    r_inner = min(h, w) * 0.1
     
     y, x = np.ogrid[:h, :w]
     dist_from_center = np.sqrt((x - cx)**2 + (y - cy)**2)
     mask_hf = (dist_from_center >= r_inner) & (dist_from_center <= r_outer)
     
     if not np.any(mask_hf):
+        del magnitude_spectrum
+        del dist_from_center
         return 0.0, "Image too small for FFT analysis."
         
     hf_energy = magnitude_spectrum[mask_hf]
     mean_hf = np.mean(hf_energy)
     
     # Anisotropy: Moment Analysis (Rotationally Invariant)
-    # Treat HF energy as a distribution of points and find the ratio of eigenvalues.
-    # We use 2nd order moments to find the principle directionality.
-    yy, xx = np.mgrid[:h, :w]
-    shifted_y = yy - cy
-    shifted_x = xx - cx
+    # Optimized: Use relative coordinates directly from ogrid
+    # yy, xx = np.mgrid[:h, :w] - removed for memory efficiency
+    rel_y = (np.arange(h) - cy)
+    rel_x = (np.arange(w) - cx)
+    
+    # We need to broadcast these for the mask
+    # But to save memory, we can mask the ogrid components if possible
+    y_coords = rel_y.reshape(-1, 1).repeat(w, axis=1)[mask_hf]
+    x_coords = rel_x.reshape(1, -1).repeat(h, axis=0)[mask_hf]
     
     # Weight spatial coordinates by magnitude spectrum
-    m00 = np.sum(magnitude_spectrum[mask_hf])
-    m01 = np.sum(shifted_y[mask_hf] * magnitude_spectrum[mask_hf])
-    m10 = np.sum(shifted_x[mask_hf] * magnitude_spectrum[mask_hf])
+    m00 = np.sum(hf_energy)
+    m01 = np.sum(y_coords * hf_energy)
+    m10 = np.sum(x_coords * hf_energy)
     
     # Central moments
-    mu20 = np.sum((shifted_x[mask_hf] - (m10/m00))**2 * magnitude_spectrum[mask_hf]) / m00
-    mu02 = np.sum((shifted_y[mask_hf] - (m01/m00))**2 * magnitude_spectrum[mask_hf]) / m00
-    mu11 = np.sum((shifted_x[mask_hf] - (m10/m00)) * (shifted_y[mask_hf] - (m01/m00)) * magnitude_spectrum[mask_hf]) / m00
+    mu20 = np.sum((x_coords - (m10/m00))**2 * hf_energy) / m00
+    mu02 = np.sum((y_coords - (m01/m00))**2 * hf_energy) / m00
+    mu11 = np.sum((x_coords - (m10/m00)) * (y_coords - (m01/m00)) * hf_energy) / m00
+    
+    # Cleanup intermediate arrays
+    del magnitude_spectrum
+    del mask_hf
+    del dist_from_center
+    del y_coords
+    del x_coords
     
     # Eigenvalues of the structure tensor equivalent
-    # lambda = (mu20 + mu02) / 2 +/- sqrt(((mu20 - mu02)/2)^2 + mu11^2)
     common = np.sqrt(((mu20 - mu02)/2)**2 + mu11**2 + 1e-9)
     lam1 = (mu20 + mu02) / 2 + common
     lam2 = (mu20 + mu02) / 2 - common
     
     # Anisotropy ratio (1 - minor/major). 
-    # Perfectly directional edges -> 1.0. Random noise -> 0.0.
     directionality = 1.0 - (lam2 / (lam1 + 1e-9))
     
     # Final Sharpness Score: Combination of HF energy and Directionality
-    # We use sqrt of directionality to be less aggressive than squaring for stability
     raw_score = min((mean_hf / (h*w)) * np.sqrt(directionality) * 8000.0, 1.0)
     
     # Phase 2: Aperture-aware adjustment
@@ -1290,25 +1342,37 @@ def _detect_objects(img: np.ndarray) -> list[dict]:
         return detections
         
     try:
-        # Run inference
-        results = g_yolo_model.predict(
-            source=img, conf=YOLO_CONFIDENCE_THRESHOLD, iou=YOLO_NMS_THRESHOLD, verbose=False
-        )
-        
-        if results and results[0].boxes:
-            result = results[0]
-            boxes = result.boxes.xyxy.cpu().numpy()
-            confs = result.boxes.conf.cpu().numpy()
-            classes = result.boxes.cls.cpu().numpy().astype(int)
+        # Run inference with memory safety
+        with torch.inference_mode():
+            results = g_yolo_model.predict(
+                source=img, 
+                conf=YOLO_CONFIDENCE_THRESHOLD, 
+                iou=YOLO_NMS_THRESHOLD, 
+                verbose=False
+            )
             
-            for i in range(len(boxes)):
-                name = g_coco_names[classes[i]] if g_coco_names and classes[i] < len(g_coco_names) else f"obj_{classes[i]}"
-                detections.append({
-                    'box': boxes[i].tolist(),
-                    'class_id': int(classes[i]),
-                    'conf': float(confs[i]),
-                    'name': name
-                })
+            if results and results[0].boxes:
+                result = results[0]
+                boxes = result.boxes.xyxy.cpu().numpy()
+                confs = result.boxes.conf.cpu().numpy()
+                classes = result.boxes.cls.cpu().numpy().astype(int)
+                
+                for i in range(len(boxes)):
+                    name = g_coco_names[classes[i]] if g_coco_names and classes[i] < len(g_coco_names) else f"obj_{classes[i]}"
+                    detections.append({
+                        'box': boxes[i].tolist(),
+                        'class_id': int(classes[i]),
+                        'conf': float(confs[i]),
+                        'name': name
+                    })
+                
+                # Cleanup results explicitly
+                del results
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                elif hasattr(torch, "mps") and torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
+                    
     except Exception as e:
         logger.error(f"YOLO detection failed: {e}")
         
@@ -1452,16 +1516,35 @@ def evaluate_photo_quality(
         focus_area_score, composition_score
     )
 
-    return {
+    report = {
         "metadataStatus": metadata["status"],
+        "overallConfidence": float(overall_confidence),
         "technicalScore": float(tech_score),
         "aestheticScore": float(aesthetic_score),
-        "overallConfidence": float(overall_confidence),
         "judgement": judgement,
         "judgementDescription": judgement_description,
         "description": image_description,
-        "metrics": results
+        "metrics": results,
+        "cameraInfo": {
+            "make": metadata.get("make"),
+            "model": metadata.get("model"),
+            "lens": metadata.get("lens")
+        },
+        "reasoning": {
+            "technical": judgement_description,
+            "aesthetic": image_description
+        }
     }
+    
+    # AGGRESSIVE CLEANUP
+    del img
+    del gray
+    del detections
+    del metadata
+    del results
+    gc.collect()
+    
+    return report
 
 
 # --- File Processing Function ---
