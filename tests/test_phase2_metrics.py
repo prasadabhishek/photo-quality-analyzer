@@ -145,7 +145,8 @@ class TestPhase2Metrics(unittest.TestCase):
             
             # Shallow DOF should be more lenient
             self.assertGreater(score_shallow, score_deep)
-            self.assertIn("shallow dof", expl_shallow.lower())
+            # New multi-subject logic uses different explanation format
+            self.assertIn("soft", expl_shallow.lower())
 
 
         finally:
