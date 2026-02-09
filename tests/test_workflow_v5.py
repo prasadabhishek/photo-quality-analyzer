@@ -45,7 +45,7 @@ class TestWorkflowEnhancements(unittest.TestCase):
     def test_threshold_move_selects(self):
         """Verify --min_conf moves good images to 'selects'."""
         # Use a low threshold so the good image passes
-        process_folder(self.assets_dir, verbose=False, move_files=True, min_conf_threshold=0.1)
+        process_folder(self.assets_dir, verbose=False, move_files=True, min_conf_threshold=0.1, enable_subject_detection=False)
         
         # Debug: List what's in the assets directory
         selects_dir = os.path.join(self.assets_dir, "selects")
@@ -68,7 +68,7 @@ class TestWorkflowEnhancements(unittest.TestCase):
         # Note: We need to reset the good image location as it might have moved in previous test if we don't mock/isolate
         # But here setUp creates fresh dir every time
         
-        process_folder(self.assets_dir, verbose=False, move_files=True, min_conf_threshold=0.99)
+        process_folder(self.assets_dir, verbose=False, move_files=True, min_conf_threshold=0.99, enable_subject_detection=False)
         
         # Debug: List what's in the assets directory
         rejects_dir = os.path.join(self.assets_dir, "rejects")

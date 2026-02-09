@@ -1608,7 +1608,7 @@ def detect_objects(image_path: str, model_size: str = "nano") -> list[str]:
 
 # --- File Processing Function ---
 
-def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_metrics: list[str] = None, min_conf_threshold: float = None) -> None:
+def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_metrics: list[str] = None, min_conf_threshold: float = None, enable_subject_detection: bool = True) -> None:
     """
     Orchestrates the batch processing of an image directory.
     
@@ -1650,13 +1650,15 @@ def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_
              logger.info(f"Judgement Mode: Bad photos (Poor/Very Poor) will be moved to: {bad_dir}")
     
     # Auto-initialize if not already loaded (e.g. library usage)
-    if g_yolo_model is None:
-        ensure_yolo_initialized(engine=g_model_engine)
-        
-    if g_yolo_model is None:
-        logger.critical(
-            "YOLO model could not be loaded. Cannot proceed with image processing.")
-        return
+    # Skip if subject detection is disabled (useful for tests)
+    if enable_subject_detection:
+        if g_yolo_model is None:
+            ensure_yolo_initialized(engine=g_model_engine)
+            
+        if g_yolo_model is None:
+            logger.critical(
+                "YOLO model could not be loaded. Cannot proceed with image processing.")
+            return
 
     processed_count = 0
 
@@ -1681,7 +1683,7 @@ def process_folder(folder_path: str, verbose: bool, move_files: bool, requested_
                                 f"Skipping {filename} as it's already in a target move directory.")
                         continue
 
-                result = evaluate_photo_quality(image_path, requested_metrics=requested_metrics)
+                result = evaluate_photo_quality(image_path, requested_metrics=requested_metrics, enable_subject_detection=enable_subject_detection)
                 processed_count += 1
 
                 # Conditional logging based on verbosity for individual results
