@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Release & Publish to PyPI
 
 on:
   push:
@@ -6,12 +6,12 @@ on:
       - 'v*'
 
 jobs:
-  publish:
+  release-and-publish:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      id-token: write  # Required for trusted publishing
-      contents: read
+      id-token: write      # Required for PyPI trusted publishing
+      contents: write      # Required for creating GitHub releases
       
     steps:
     - uses: actions/checkout@v4
@@ -20,8 +20,29 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-        
-    - name: Install dependencies
+    
+    # Extract version from tag (e.g., v0.7.0 -> 0.7.0)
+    - name: Extract version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    # Extract changelog section for this version
+    - name: Extract changelog
+      id: changelog
+      run: |
+        python scripts/extract_changelog.py ${{ steps.version.outputs.VERSION }} > release_notes.md
+        echo "Changelog extracted for v${{ steps.version.outputs.VERSION }}"
+    
+    # Create GitHub Release with changelog
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+    
+    # Build package for PyPI
+    - name: Install build dependencies
       run: |
         python -m pip install --upgrade pip
         pip install build coverage
@@ -29,5 +50,6 @@ jobs:
     - name: Build package
       run: python -m build
       
+    # Publish to PyPI using trusted publishing
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
