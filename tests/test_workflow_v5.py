@@ -47,7 +47,19 @@ class TestWorkflowEnhancements(unittest.TestCase):
         # Use a low threshold so the good image passes
         process_folder(self.assets_dir, verbose=False, move_files=True, min_conf_threshold=0.1)
         
-        selects_path = os.path.join(self.assets_dir, "selects", "good.jpg")
+        # Debug: List what's in the assets directory
+        selects_dir = os.path.join(self.assets_dir, "selects")
+        if not os.path.exists(selects_dir):
+            # Print directory contents for debugging
+            print(f"Contents of {self.assets_dir}: {os.listdir(self.assets_dir)}")
+            self.fail(f"selects/ directory was not created in {self.assets_dir}")
+        
+        selects_path = os.path.join(selects_dir, "good.jpg")
+        if not os.path.exists(selects_path):
+            # Print selects directory contents for debugging  
+            print(f"Contents of selects/: {os.listdir(selects_dir)}")
+            self.fail(f"good.jpg was not moved to selects/")
+        
         self.assertTrue(os.path.exists(selects_path))
         
     def test_threshold_move_rejects(self):
@@ -58,7 +70,17 @@ class TestWorkflowEnhancements(unittest.TestCase):
         
         process_folder(self.assets_dir, verbose=False, move_files=True, min_conf_threshold=0.99)
         
-        rejects_path = os.path.join(self.assets_dir, "rejects", "bad.jpg")
+        # Debug: List what's in the assets directory
+        rejects_dir = os.path.join(self.assets_dir, "rejects")
+        if not os.path.exists(rejects_dir):
+            print(f"Contents of {self.assets_dir}: {os.listdir(self.assets_dir)}")
+            self.fail(f"rejects/ directory was not created in {self.assets_dir}")
+        
+        rejects_path = os.path.join(rejects_dir, "bad.jpg")
+        if not os.path.exists(rejects_path):
+            print(f"Contents of rejects/: {os.listdir(rejects_dir)}")
+            self.fail(f"bad.jpg was not moved to rejects/")
+        
         self.assertTrue(os.path.exists(rejects_path))
 
 if __name__ == '__main__':
