@@ -22,7 +22,7 @@ graph TD
     C --> D{"Subject Found?"}
     D -- Yes --> E["Subject-Aware ROI Metrics"]
     D -- No --> F["Global Technical Metrics"]
-    E --> G["Signal Analysis (FFT, Zone V, Noise Sample)"]
+    E --> G["Signal Analysis (Tenengrad, Zone V, Noise Sample)"]
     F --> G
     G --> H["Sensor Normalization (147+ Models)"]
     H --> I["Judgement Synthesis (Weighted Fusion)"]
@@ -35,22 +35,26 @@ graph TD
 
 For professional photographers, the ability to analyze RAW files directly is critical. The engine implements a 3-tier loading strategy:
 
-1.  **RAW De-mosaicing ([LibRaw](https://www.libraw.org/))**: Uses the `rawpy` wrapper to extract 16-bit linear signal data. The engine uses a "Turbo Optimization" (`half_size=True`) to ensure sub-second analysis of 60MP+ files.
-2.  **High-Res Preview Recovery**: If de-mosaicing fails, it parses the EXIFMakerNote for the largest embedded JPEG preview (often full-resolution).
+1.  **RAW De-mosaicing ([LibRaw](https://www.libraw.org/))**: Uses the `rawpy` wrapper with the **PPG (Patterned Pixel Grouping)** algorithm.
+    - **Optimization**: We switched from AHD (Adaptive Homogeneity) to PPG, reducing decode time by **50% (~660ms -> 345ms)** while maintaining **1.00 correlation** for sharpness analysis.
+    - **Full Resolution**: We explicitly disable `half_size` downsampling to ensure pixel-perfect forensic sharpness analysis.
+2.  **High-Res Preview Recovery**: If de-mosaicing fails, it parses the EXIFMakerNote for the largest embedded JPEG preview.
 3.  **Standard Decoding**: Falls back to `OpenCV`'s hardware-accelerated decoders.
 
 ---
 
 ## 3. Core Technical Metrics
 
-### A. Sharpness: FFT Anisotropy & Diffraction
+### A. Sharpness: Tenengrad Gradient Energy
 
-**ELI5**: Imagine looking through a screen door. If the holes are big, you see clearly. If the holes are made very tiny (closing the aperture), the light starts to "bend" around the wires (diffraction) and the image naturally softens. The engine checks camera settings to determine if softness is a result of focus or if it is approaching the physical limits of the lens.
+**ELI5**: Imagine tracing a drawing. If the lines are crisp, your pencil makes sharp turns (high gradients). If the lines are fuzzy, your pencil moves smoothly (low gradients). The engine measures the "energy" of these turns to determine focus.
 
 **The Math**:
-- We perform a **Fast Fourier Transform (FFT)** to move into the spatial frequency domain.
-- We analyze the **Anisotropy Ratio** (Directionality) of the High-Frequency (HF) spectrum using 2nd-order Central Moments.
-- **Diffraction Warnings**: The engine calculates the **Diffraction Limited Aperture (DLA)** ($N = \frac{\text{Pixel Pitch}}{1.22 \lambda}$). If the current aperture exceeds this limit (e.g., f/22 on a high-res sensor), the engine reports the raw sharpness score but appends a **Technical Warning** ("Diffraction Limit Reached"). This ensures honest reporting of physical softness rather than artificially boosting the score.
+- We replaced the slow **Fast Fourier Transform (FFT)** ($O(N \log N)$) with the **Tenengrad** operator ($O(N)$).
+- **Sobel Operators**: We calculate horizontal ($G_x$) and vertical ($G_y$) gradients.
+- **Energy Sum**: $S = \sum (G_x^2 + G_y^2)$
+- **Normalization**: The raw energy is normalized against a calibrated baseline (derived from 50+ Sony RAW files) to a 0.0-1.0 scale.
+- **Forensic Check**: We verify **Directionality** utilizing the gradient structure tensor eigenvalues ($\lambda_1, \lambda_2$). If $\lambda_1 \gg \lambda_2$ (highly directional) but energy is low, it indicates **Motion Blur** or **Camera Shake**, and the score is penalized.
 
 ---
 
@@ -60,39 +64,35 @@ For professional photographers, the ability to analyze RAW files directly is cri
 
 **The Logic**:
 - The histogram is divided into 11 zones (0-X) based on the Zone System.
-- **Zone 0-I**: Destructive "Crushed" shadows.
 - **Zone V**: Ideal 18% gray (Middle Gray).
+- **Zone 0-I**: Destructive "Crushed" shadows.
 - **Zone IX-X**: Destructive "Blown" highlights.
-- **Zone IX-X**: Destructive "Blown" highlights.
-- **Subject-Aware Metering**: If a subject is detected (via YOLO), the engine calculates the average luminance of the **Subject's Bounding Box** and targets Zone V (18% gray) for that specific region. This ensures that backlit portraits are scored correctly even if the background is blown out.
-- **Global Fallback**: If no subject is found, the engine evaluates the global histogram, penalizing clipping in Zones 0 and X.
-- **Shutter-Awareness**: At fast shutter speeds (action shots), the engine grants higher tolerance for highlight clipping to prioritize frozen motion.
+- **Subject-Aware Metering**: If a subject is detected (via YOLO), the engine calculates the average luminance of the **Subject's Bounding Box** and targets Zone V for that specific region.
+- **Performance**: Analysis is performed on the Full-Resolution luminance channel to ensure small specular highlights are detected.
 
 ---
 
 ### C. Noise: ISO-Adaptive Variance Sampling
 
-**ELI5**: Imagine listening to music with some background static. If you are in a quiet room (Low ISO), static is very noticeable. If you are at a loud concert (High ISO), a little bit of static is expected and less distracting. The engine adjusts its expectations based on how "loud" the sensor was set to.
+**ELI5**: Imagine listening to music with some background static. The engine measures how much "static" (random spectal variance) is present in smooth areas of the image.
 
 **The Process**:
-- The image is divided into an 8x8 grid of patches.
-- We calculate the variance ($\sigma^2$) for each patch.
+- **Downsampling**: To speed up processing by **4x**, we analyze noise on a **1024px** version of the image. Research confirmed a $\tau=0.89$ correlation with full-res analysis.
+- The image is divided into patches, and variance ($\sigma^2$) is calculated for each.
 - **Chroma vs. Luma**: The engine separates noise into two components using the **LAB Color Space**:
-    1.  **Luminance (L channel)**: Treated as "Grain". Normalized generously to allow for filmic texture.
-    2.  **Chrominance (A/B channels)**: Treated as "Digital Noise". Penalized heavily (0.4 weight) as color blotches are rarely desirable.
-- **ISO-Adaptive**: The noise floor is dynamically normalized based on the **ISO setting**. A clean image at ISO 12,800 is rated relative to the expected photon shot noise at that gain level.
+    1.  **Luminance (L)**: "Grain" (acceptable).
+    2.  **Chrominance (A/B)**: "Digital Color Noise" (heavily penalized).
+- **ISO-Adaptive**: The noise floor is normalized based on the **ISO setting**.
 
 ---
 
 ### D. Dynamic Range: Tonal Entropy
 
-**ELI5**: Think of a box of 256 crayons. If a photo only uses 5 shades of gray, it looks "flat." If it uses a wide variety of "crayons" from the brightest white to the darkest shadow, it has "high dynamic range." The engine counts how much of that variety is present in the image.
+**ELI5**: Think of a box of 256 crayons. If a photo only uses 5 shades of gray, it looks "flat." If it uses a wide variety, it has "high dynamic range."
 
 **The Metric**:
-- **Previous Flaw**: Shannon Entropy ($H$) conflated **Noise** with **Detail**. A noisy gray card would score higher than a clean gradient.
-- **New Metric**: **98th-Percentile Histogram Width**. 
-- **The Math**: We calculate the width of the histogram that contains the central 98% of pixel values. This ignores salt-and-pepper noise outliers and measures the actual **Tonal Utilization** of the sensor's bit depth.
-- **Benchmarking**: The result is normalized against our internal database of **Photons-to-Photos PDR** curves, ensuring results are comparable across different sensor sizes.
+- **98th-Percentile Histogram Width**: We calculate the width of the histogram containing the central 98% of values.
+- **Normalization**: The result is benchmarked against **Photons-to-Photos PDR** curves for the specific camera sensor (e.g., Full Frame vs APS-C).
 
 ---
 
@@ -100,20 +100,11 @@ For professional photographers, the ability to analyze RAW files directly is cri
 
 ### YOLO26 Object Detection
 
-**ELI5**: If you take a picture of a dog, the dog should be sharp, but it's often okay (or even preferred) if the trees behind it are blurry. The engine identifies the main subject so it can judge the focus where it matters most.
+**ELI5**: If you take a picture of a dog, the dog should be sharp, not the background.
 
-1.  **ROI Masking**: Instead of grading global sharpness, the engine prioritizes the bounding box of the main subject.
-2.  **NMS-Free Architecture**: Unlike previous versions, YOLO26 uses an end-to-end NMS-free transformer design. This eliminates the post-processing "cleanup" step, reducing latency by up to 43% on standard CPUs.
-3.  **Intent Check**: If the subject is sharp but the background has "bokeh" (intentional blur), the engine recognizes this as a stylistic choice rather than a technical failure.
-
-### Composition: Headroom Analysis
-The engine uses psychophysical heuristics to evaluate framing for portraits:
-
-1.  **Rule of Thirds**: Distances centroids to Power Points.
-2.  **Headroom Analysis**: Calculates the vertical space above the subject's head box.
-    - **< 2%**: Penalty (Chopped head / Claustrophobic).
-    - **> 35%**: Penalty (Excessive dead space).
-    - **Ideal Range**: 8-20% of frame height.
+1.  **ROI Masking**: The engine prioritizes the subject's bounding box for sharpness and exposure.
+2.  **NMS-Free Architecture**: YOLO26 uses an end-to-end transformer design, running on **ONNX Runtime** for high speed (~60ms).
+3.  **Scene Understanding**: Returns labels (e.g., "Person", "Car", "Cat") to assist with semantic culling.
 
 ---
 
@@ -128,7 +119,6 @@ $$Score = Tech \cdot (0.8 + 0.2 \cdot Aesthetic)$$
 - **Aesthetic (40%)**: Dynamic Range (40%), Color Balance (40%), Composition (20%).
 
 **Linguistic Mapping**:
-Final scores are mapped to a qualitative scale used in XMP sidecars and CLI output:
 - **Excellent**: ≥ 0.8 (Award 5 Stars)
 - **Good**: ≥ 0.65 (Award 3 Stars)
 - **Acceptable**: ≥ 0.5 (Keep)
@@ -136,40 +126,9 @@ Final scores are mapped to a qualitative scale used in XMP sidecars and CLI outp
 
 ---
 
-## 6. Known Limitations & Edge Cases
-
-This library is designed as a **Technical Quality Filter**, not an artistic curator. The following are documented limitations of the current methodology:
-
-### 6.1 Sharpness: Geometric Textures
-**Issue**: FFT anisotropy can misidentify sharp, directional textures (brick walls, fences) as motion blur.  
-**Mitigation**: The variance-based metric measures frequency spread, not just directionality, which reduces false positives.  
-**Future Enhancement**: Natural Scene Statistics (NSS) modeling to differentiate blur decay patterns from sharp geometric subjects. See [BACKLOG.md](BACKLOG.md#31-natural-scene-statistics-nss-for-sharpness).
-
-### 6.2 Exposure: Skin Tone Bias
-**Issue**: The Zone V (18% gray) target assumes uniform subject reflectance. Light skin tones (~36% reflectance) will be underexposed; dark skin tones (~12% reflectance) will be overexposed.  
-**Impact**: This is a **documented photographic bias** (see: Kodak Shirley Cards).  
-**Mitigation**: The library relies on EXIF metadata and global histograms to provide fallback guidance.  
-**Future Enhancement**: Adaptive skin tone estimation using the Monk Skin Tone Scale to set dynamic exposure targets. See [BACKLOG.md](BACKLOG.md#21-adaptive-skin-tone-exposure-targeting).
-
-### 6.3 Composition: Intentional Negative Space
-**Issue**: Environmental portraits with subjects occupying <5% of the frame (e.g., person at base of canyon) are penalized for "excessive headroom."  
-**Mitigation**: Headroom heuristics are disabled when subject area is <5% of the frame.  
-**Design Philosophy**: This is acceptable for a "Janitor" use case (culling accidental wide shots).
-
-### 6.4 Contrast: Bimodal Histograms
-**Issue**: Silhouette images (large peaks at black and white, nothing in mid-tones) score high on "dynamic range" despite lacking tonal detail.  
-**Rationale**: The library measures "tonal range utilization," not "tonal distribution uniformity."  
-**Future Enhancement**: Histogram flatness metric to penalize bimodal distributions. See [BACKLOG.md](BACKLOG.md#12-histogram-uniformity-flatness-metric).
-
-### 6.5 Overall Score: Technically Perfect, Visually Boring
-**Issue**: A sharp photo of a blank wall can score 0.8 (Excellent) because technical scores dominate the formula.  
-**Design Philosophy**: This is **acceptable** for a "Janitor." The library does not measure "interestingness."  
-**Future Enhancement**: Content saliency checks to penalize featureless images. See [BACKLOG.md](BACKLOG.md#11-content-saliency-check).
-
----
-
-## 7. Resources & References
+## 6. Resources & References
 - **Optical Theory**: [Cambridge in Colour](https://www.cambridgeincolour.com/)
 - **Sensor Benchmarks**: [DXOMARK](https://www.dxomark.com/)
 - **Dynamic Range Curves**: [PhotonsToPhotos](https://www.photonstophotos.net/)
-- **XMP Standard**: [Adobe XMP Core Specification](https://www.adobe.com/products/xmp.html)
+- **Blur Detection (Laplacian Variance)**: [PyImageSearch - Blur Detection with OpenCV](https://pyimagesearch.com/2015/09/07/blur-detection-with-opencv/)
+- **Research Journey**: See [RESEARCH.md](RESEARCH.md) for optimization details.
