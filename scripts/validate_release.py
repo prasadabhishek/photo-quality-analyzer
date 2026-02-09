@@ -66,14 +66,17 @@ def get_requirements_deps():
 def check_consistency():
     print("--- Checking Consistency ---")
     
-    # 1. Dependency Consistency
+    # 1. Dependency Consistency (only if requirements.txt still exists)
     py_deps = get_pyproject_deps()
     req_deps = get_requirements_deps()
     
-    if py_deps != req_deps:
-        print(f"❌ Error: Dependency mismatch between pyproject.toml and requirements.txt")
-        print(f"Difference: {py_deps.symmetric_difference(req_deps)}")
-        return False
+    if req_deps:  # Only check if requirements.txt exists and has deps
+        if py_deps != req_deps:
+            print(f"❌ Error: Dependency mismatch between pyproject.toml and requirements.txt")
+            print(f"Difference: {py_deps.symmetric_difference(req_deps)}")
+            return False
+    else:
+        print("ℹ️  requirements.txt not found (using pyproject.toml only)")
     
     # 2. Version Consistency
     version_pyproject = ""
