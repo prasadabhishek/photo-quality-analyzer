@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "photo_quality_analyzer_core"
-version = "0.7.0"
+version = "--version"
 authors = [
   { name="Abhishek Prasad" },
 ]

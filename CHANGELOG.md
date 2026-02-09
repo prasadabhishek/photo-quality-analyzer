@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2026-02-08
+
+### 🐛 Bug Fixes
+
+- **CI Tests**: Fixed `test_threshold_move_selects` and `test_threshold_move_rejects` test failures in GitHub Actions
+- **Testing**: Added `enable_subject_detection` parameter to `process_folder` function to allow tests to run without YOLO model
+- **Performance**: Tests now run faster by skipping YOLO initialization when not needed
+- **Reliability**: Directory creation now happens before YOLO checks, ensuring robust file organization even if model loading fails
+
 ## [0.7.0] - 2026-02-08
 
 ### 🎯 Major Features
