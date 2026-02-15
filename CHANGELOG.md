@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-02-15
+
+### Optimization
+- **RAW Loading Pipeline**: Refactored `_load_image_with_raw_support` to prioritize `rawpy.extract_thumb()` for instant previews when `fast_mode=True`.
+- **Fujifilm Support**: Added `.raf` extensions to the fast loading path, fixing a specific bottleneck for Fuji users.
+
 ## [0.8.0] - 2026-02-15
 
 ### 🚀 Performance Overhaul

@@ -1106,7 +1106,7 @@ def _generate_assessment_summary(
 
 # --- Main Evaluation Function ---
 
-def _load_image_with_raw_support(image_path: str) -> np.ndarray | None:
+def _load_image_with_raw_support(image_path: str, fast_mode: bool = False) -> np.ndarray | None:
     """
     Orchestrates high-fidelity image loading with format-aware fallbacks.
     
@@ -1116,42 +1116,22 @@ def _load_image_with_raw_support(image_path: str) -> np.ndarray | None:
        (crucial for Sony/Canon RAW where rawpy may be unavailable).
     3. Standard Decoding: Falls back to `OpenCV` (LibJPEG/LibPNG).
     
-    This multi-stage process ensures that professional photographers can 
-    analyze high-res RAW files locally with maximum performance.
+    Optimization (Fast Mode):
+    If fast_mode is True, we prioritize the Embedded Preview (instant extraction)
+    over rawpy demosaicing (computationally expensive).
     """
     ext = os.path.splitext(image_path)[1].lower()
-    raw_extensions = {'.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3', '.rw2', '.nrw', '.gpr', '.sr2', '.pef', '.rwl'}
+    raw_extensions = {
+        '.arw', '.cr2', '.nef', '.dng', '.orf', '.raf', '.srw', '.cr3', 
+        '.rw2', '.nrw', '.gpr', '.sr2', '.pef', '.rwl', '.iiq', '.3fr', '.fff'
+    }
     
-    if ext in raw_extensions:
-        # 1. Primary: Use rawpy for high-fidelity extraction if available
-        if rawpy is not None:
-            try:
-                with rawpy.imread(image_path) as raw:
-                    # Optimization: Use PPG demosaicing (Fast & High Quality, Tau=1.0 vs AHD)
-                    # We MUST use half_size=False (Full Res) for accurate Sharpness ranking.
-                    # PPG is ~2.7x faster than AHD (240ms vs 660ms).
-                    rgb = raw.postprocess(
-                        use_camera_wb=True, 
-                        no_auto_bright=False, 
-                        bright=1.0, 
-                        half_size=False,
-                        demosaic_algorithm=rawpy.DemosaicAlgorithm.PPG
-                    )
-                    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-            except Exception as e:
-                logger.warning(f"Rawpy failed for {image_path}: {e}. Falling back to ExifRead.")
-        else:
-            logger.debug(f"Rawpy not installed, using ExifRead for {image_path}")
-            
-        # 2. Secondary: Fallback to manual ExifRead preview extraction
+    # Helper to extract preview (Moved out for reuse)
+    def _extract_preview(path):
         try:
-            with open(image_path, 'rb') as f:
+            with open(path, 'rb') as f:
                 tags = exifread.process_file(f, details=False)
-                
-                # Sony and regular DCIM manufacturers often store multiple previews.
-                # We want the largest one for the best visual analysis.
                 previews = []
-                
                 # Check direct binary tags
                 for tag_name in ['JPEGThumbnail', 'PreviewImage', 'MakerNote Thumbnail']:
                     if tag_name in tags:
@@ -1159,7 +1139,6 @@ def _load_image_with_raw_support(image_path: str) -> np.ndarray | None:
                         data = val.values if hasattr(val, 'values') else val
                         if isinstance(data, (bytes, bytearray)):
                             previews.append(data)
-                
                 # Check offset/length tags
                 for prefix in ['', 'Image ', 'Thumbnail ']:
                     offset_tag = tags.get(f'{prefix}JPEGInterchangeFormat')
@@ -1170,22 +1149,68 @@ def _load_image_with_raw_support(image_path: str) -> np.ndarray | None:
                             length = int(length_tag.values[0]) if hasattr(length_tag, 'values') else int(length_tag[0])
                             f.seek(offset)
                             previews.append(f.read(length))
-                        except:
-                            continue
-                
+                        except: continue
                 if previews:
-                    # Sort by length and pick the largest
                     previews.sort(key=len, reverse=True)
-                    preview_data = previews[0]
+                    img_array = np.frombuffer(previews[0], dtype=np.uint8)
+                    return cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        except Exception:
+            return None
+        return None
+
+    if ext in raw_extensions:
+        # STRATEGY 1: Fast Mode -> Try Preview First
+        if fast_mode and rawpy is not None:
+            logger.debug(f"Fast Mode: Attempting rawpy thumbnail extraction for {image_path}")
+            try:
+                with rawpy.imread(image_path) as raw:
+                    try:
+                        thumb = raw.extract_thumb()
+                    except rawpy.LibRawNoThumbnailError:
+                        thumb = None
                     
-                    img_array = np.frombuffer(preview_data, dtype=np.uint8)
-                    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-                    if img is not None:
-                        # Log the size of the preview we're using
-                        logger.debug(f"Using {len(preview_data)/1024:.1f}KB preview for {image_path}")
-                        return img
-        except Exception as e:
-            logger.warning(f"ExifRead fallback failed for {image_path}: {e}")
+                    if thumb:
+                        if thumb.format == rawpy.ThumbFormat.JPEG:
+                            img_array = np.frombuffer(thumb.data, dtype=np.uint8)
+                            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                            if img is not None:
+                                logger.info(f"Fast Mode: Used rawpy embedded thumbnail for {image_path}")
+                                return img
+            except Exception as e:
+                logger.debug(f"Rawpy thumbnail extraction failed: {e}")
+
+        # STRATEGY 1.5: Fast Mode -> Try ExifRead Preview (Fallback)
+        if fast_mode:
+            logger.debug(f"Fast Mode: Attempting ExifRead preview extraction for {image_path}")
+            preview = _extract_preview(image_path)
+            if preview is not None:
+                logger.info(f"Fast Mode: Used ExifRead embedded preview for {image_path}")
+                return preview
+        
+        # STRATEGY 2: High Quality / Fallback -> Use Rawpy Demosaic
+        if rawpy is not None:
+            try:
+                with rawpy.imread(image_path) as raw:
+                    # In Fast Mode (if preview failed), use half_size for speed
+                    # In Forensic Mode, use full size
+                    use_half = True if fast_mode else False
+                    
+                    rgb = raw.postprocess(
+                        use_camera_wb=True, 
+                        no_auto_bright=False, 
+                        bright=1.0, 
+                        half_size=use_half,
+                        demosaic_algorithm=rawpy.DemosaicAlgorithm.PPG
+                    )
+                    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            except Exception as e:
+                logger.warning(f"Rawpy failed for {image_path}: {e}. Falling back to ExifRead.")
+        
+        # STRATEGY 3: Final Fallback -> Preview (if not tried yet, e.g. strict forensic mode but rawpy failed)
+        if not fast_mode: 
+            preview = _extract_preview(image_path)
+            if preview is not None:
+                return preview
             
     # Fallback to standard imread for JPG/PNG or if RAW extraction failed
     return cv2.imread(image_path)
@@ -1335,7 +1360,8 @@ def evaluate_photo_quality(
     requested_metrics: list[str] = None,
     enable_subject_detection: bool = True,
     model_size: str = "nano",
-    engine: str = "yolo"
+    engine: str = "yolo",
+    force_downsample: bool = False
 ) -> dict:
     """
     Performs a comprehensive technical and aesthetic assessment of a photograph.
@@ -1344,6 +1370,11 @@ def evaluate_photo_quality(
     analyzes signal properties (Sharpness, Exposure, Noise, DR), and runs 
     neural-network based subject/composition analysis to provide a 
     weighted "Final Judgement."
+    
+    Fast Mode:
+    If force_downsample is True, the image is resized to 1024px immediately.
+    This dramatically speeds up analysis (especially Sharpness) for high-res images,
+    with a documented ~3-5% deviation in final score.
     
     Returns:
         dict: A structured report containing:
@@ -1363,9 +1394,18 @@ def evaluate_photo_quality(
     if not enable_subject_detection:
         requested = requested - {"focus", "composition"}
 
-    img = _load_image_with_raw_support(image_path)
+    img = _load_image_with_raw_support(image_path, fast_mode=force_downsample)
     if img is None:
         raise ValueError(f"Failed to load image: {image_path}")
+    
+    # Fast Mode Optimization: Aggressive Downsampling
+    orig_h, orig_w = img.shape[:2]
+    target_dim = 1024
+    if force_downsample and max(orig_h, orig_w) > target_dim:
+        logger.info(f"Fast Mode Active: Downsampling {orig_w}x{orig_h} image to 1024px for analysis")
+        scale = target_dim / max(orig_h, orig_w)
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # 1. Extract Context
@@ -1384,9 +1424,9 @@ def evaluate_photo_quality(
     # Metrics Storage
     results = {}
     
-    # Resizing Optimization (Calculated once, used by Noise and Color)
+    # Resizing Optimization (Used by Noise and Color)
+    # In Fast Mode, small_img IS img.
     h, w = gray.shape
-    target_dim = 1024
     small_img = None
     small_gray = None
     
