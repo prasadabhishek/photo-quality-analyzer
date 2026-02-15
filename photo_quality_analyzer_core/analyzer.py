@@ -493,15 +493,77 @@ def _extract_metadata(image_path: str) -> dict:
 
 # --- Metric Calculation Helper Functions ---
 
+def _calculate_gradient_sparsity(mag_sq: np.ndarray) -> float:
+    """
+    Measures how 'spread out' or 'sparse' the gradient energy is.
+    
+    Science:
+    Sharp photos have energy spread across complex textures (low sparsity).
+    Silhouettes have energy concentrated in a very thin border line (high sparsity).
+    
+    Returns:
+    float: Sparsity score (0.0 to 1.0). Higher means more sparse (silhouette-like).
+    """
+    total_pixels = mag_sq.size
+    peak_energy = np.max(mag_sq)
+    if peak_energy == 0:
+        return 0.0
+        
+    # Pixels that contribute significantly to the energy (top 10% of peak)
+    energy_threshold = peak_energy * 0.1
+    active_pixels = np.sum(mag_sq > energy_threshold)
+    
+    # Sparsity is the inverse of active pixel density
+    # A true sharp photo has thousands of active edge pixels.
+    # A silhouette has a thin line of only a few hundred.
+    sparsity = 1.0 - (active_pixels / (total_pixels * 0.01)) # Normalized to 1% density
+    return max(0.0, min(1.0, sparsity))
+
+
+def _calculate_fft_sharpness(gray_img: np.ndarray) -> float:
+    """
+    Evaluates sharpness in the frequency domain using FFT.
+    
+    Science:
+    A sharp image has high-frequency components spread across the spectrum.
+    """
+    from scipy.fft import fft2, fftshift
+    
+    # Optimized: Use input if it's already small enough, otherwise resize to 256 for SPEED
+    h, w = gray_img.shape
+    if max(h, w) > 256:
+        scale = 256 / max(h, w)
+        small = cv2.resize(gray_img, (0,0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    else:
+        small = gray_img
+
+    f = fft2(small)
+    fshift = fftshift(f)
+    magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+    
+    # Calculate energy in high frequency areas (outer rings)
+    h, w = magnitude_spectrum.shape
+    cy, cx = h // 2, w // 2
+    
+    # Mask out the center (low frequencies)
+    y, x = np.ogrid[:h, :w]
+    dist_from_center = np.sqrt((x - cx)**2 + (y - cy)**2)
+    
+    # Outer 35% of the spectrum
+    high_freq_mask = dist_from_center > (min(h, w) * 0.35)
+    high_freq_energy = np.mean(magnitude_spectrum[high_freq_mask])
+    
+    # Normalization
+    score = (high_freq_energy - 10.0) / 6.0
+    return max(0.0, min(1.0, score))
+
+
 def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None, detections: list = None) -> tuple[float, str]:
     """
     Calculates image sharpness using the Tenengrad Gradient Method (Sobel Energy).
     
-    Updated Logic (Subject-Aware):
-    If a subject is detected, the score is a weighted blend:
-    - 70% Subject ROI Sharpness
-    - 30% Global Sharpness
-    This prevents sharp backgrounds from hiding blurry subjects.
+    Updated Logic (Silhouette-Aware):
+    Uses Gradient Sparsity and FFT analysis to avoid the 'Silhouette Trap'.
     """
     if gray_img is None or gray_img.size == 0:
         return 0.0, "Invalid image."
@@ -510,11 +572,19 @@ def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None, detections
     gx = cv2.Sobel(gray_img, cv2.CV_64F, 1, 0, ksize=3)
     gy = cv2.Sobel(gray_img, cv2.CV_64F, 0, 1, ksize=3)
     mag_sq = gx**2 + gy**2
-    global_mean_energy = np.mean(mag_sq)
+    
+    # Specular Capping: Prevent single hot pixels (sun, reflections) from inflating mean
+    mag_sq_capped = np.clip(mag_sq, 0, 5000)
+    global_mean_energy = np.mean(mag_sq_capped)
+    
+    # 2. Advanced Metrics (Performance Aware)
+    # Re-use the existing gray_img which is already downsampled in 'fast_mode'
+    sparsity_penalty = _calculate_gradient_sparsity(mag_sq)
+    fft_score = _calculate_fft_sharpness(gray_img)
     
     final_energy = global_mean_energy
     
-    # 2. Subject Tenengrad (if available)
+    # 3. Subject Tenengrad (if available)
     subject_modifier = ""
     if detections:
         # Find largest subject
@@ -527,7 +597,7 @@ def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None, detections
         x2, y2 = min(w, x2), min(h, y2)
         
         if x2 > x1 and y2 > y1:
-            roi_grad = mag_sq[y1:y2, x1:x2]
+            roi_grad = mag_sq_capped[y1:y2, x1:x2]
             if roi_grad.size > 0:
                 subject_mean_energy = np.mean(roi_grad)
                 
@@ -542,13 +612,23 @@ def _calculate_sharpness(gray_img: np.ndarray, metadata: dict = None, detections
 
     # Normalization
     TENENGRAD_BASE = 800.0
-    score = min(final_energy / TENENGRAD_BASE, 1.0)
+    tenengrad_score = min(final_energy / TENENGRAD_BASE, 1.0)
+    
+    # Final Multi-Factor Blend
+    spread_factor = 1.0 - sparsity_penalty
+    score = (fft_score * 0.4) + (tenengrad_score * 0.3) + (spread_factor * 0.3)
+    
+    # Multiplicative Penalty
+    if sparsity_penalty > 0.8:
+        score *= (1.2 - sparsity_penalty)
     
     # Interpretation
     if score < 0.25:
         explanation = f"Soft image{subject_modifier}."
     elif score > 0.8:
         explanation = f"High acutance{subject_modifier}."
+    elif sparsity_penalty > 0.7:
+        explanation = f"High contrast edges found, but lacking internal texture (Silhouette?){subject_modifier}."
     else:
         explanation = f"Moderate sharpness{subject_modifier}."
         
@@ -665,11 +745,11 @@ def _calculate_exposure(gray_img: np.ndarray, metadata: dict = None, detections:
     if subject_pixels:
         target_data = np.concatenate([p.ravel() for p in subject_pixels])
         mean_intensity = np.mean(target_data)
-        shadow_clip = np.sum(target_data < 5) / target_data.size
+        shadow_clip = np.sum(target_data < 15) / target_data.size
         metering_mode = "subject"
     else:
         mean_intensity = np.mean(gray_img)
-        shadow_clip = np.sum(gray_img < 5) / total_pixels
+        shadow_clip = np.sum(gray_img < 15) / total_pixels
         metering_mode = "global"
 
     ideal_mean = EXPOSURE_IDEAL_MEAN_INTENSITY
@@ -1424,20 +1504,19 @@ def evaluate_photo_quality(
     # Metrics Storage
     results = {}
     
-    # Resizing Optimization (Used by Noise and Color)
-    # In Fast Mode, small_img IS img.
-    h, w = gray.shape
-    small_img = None
-    small_gray = None
-    
-    if max(h, w) > target_dim:
-        scale = target_dim / max(h, w)
-        small_img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-        small_gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    else:
-        small_img = img
-        small_gray = gray
+    # Resizing Optimization (Used by Noise and Color, and potentially Sharpness/Exposure)
+    # Fast Mode: Drastic performance boost by downsampling early
+    processed_gray = gray # Default to the main gray image
+    processed_img_color = img # Default to the main color image
 
+    if force_downsample:
+        # Downsample to ~2MP for analysis (standard for fast review)
+        h, w = gray.shape
+        if h * w > 2_000_000:
+            scale = np.sqrt(2_000_000 / (h * w))
+            processed_gray = cv2.resize(gray, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            processed_img_color = cv2.resize(img, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    
     # --- Technical Core ---
     
     # Sharpness
@@ -1446,7 +1525,7 @@ def evaluate_photo_quality(
     if "sharpness" in requested:
         try:
             # Pass detections for Subject-Weighted Tenengrad
-            sharpness_score, sharpness_explanation = _calculate_sharpness(gray, metadata, detections=detections)
+            sharpness_score, sharpness_explanation = _calculate_sharpness(processed_gray, metadata, detections=detections)
         except Exception as e:
             logger.error(f"Sharpness calculation failed: {e}")
             sharpness_score, sharpness_explanation = 0.0, f"Error: {str(e)}"
@@ -1462,7 +1541,7 @@ def evaluate_photo_quality(
     if "focus" in requested:
         try:
             focus_area_score, focus_area_explanation, detected_object_names, main_subject_name = \
-                _calculate_focus_area(img, gray, sharpness_score, metadata, detections=detections)
+                _calculate_focus_area(processed_img_color, processed_gray, sharpness_score, metadata, detections=detections)
         except Exception as e:
             logger.error(f"Focus calculation failed: {e}")
             message = f"Error: {str(e)}"
@@ -1476,7 +1555,7 @@ def evaluate_photo_quality(
     exposure_explanation = "Exposure analysis failed."
     if "exposure" in requested:
         try:
-            exposure_score, exposure_explanation = _calculate_exposure(gray, metadata, detections=detections)
+            exposure_score, exposure_explanation = _calculate_exposure(processed_gray, metadata, detections=detections)
         except Exception as e:
             logger.error(f"Exposure calculation failed: {e}")
             exposure_score, exposure_explanation = 0.0, f"Error: {str(e)}"
@@ -1489,7 +1568,7 @@ def evaluate_photo_quality(
     noise_explanation = "Noise analysis failed."
     if "noise" in requested:
         try:
-            noise_score, noise_explanation = _calculate_noise(small_img, small_gray, metadata)
+            noise_score, noise_explanation = _calculate_noise(processed_img_color, processed_gray, metadata)
         except Exception as e:
             logger.error(f"Noise calculation failed: {e}")
             noise_score, noise_explanation = 0.0, f"Error: {str(e)}"
@@ -1504,7 +1583,7 @@ def evaluate_photo_quality(
     color_balance_explanation = "Color analysis failed."
     if "color" in requested:
         try:
-            color_balance_score, color_balance_explanation = _calculate_color_balance(small_img)
+            color_balance_score, color_balance_explanation = _calculate_color_balance(processed_img_color)
         except Exception as e:
             logger.error(f"Color calculation failed: {e}")
             color_balance_score, color_balance_explanation = 0.0, f"Error: {str(e)}"
@@ -1517,7 +1596,7 @@ def evaluate_photo_quality(
     dynamic_range_explanation = "Dynamic Range analysis failed."
     if "dynamicRange" in requested:
         try:
-            dynamic_range_score, dynamic_range_explanation = _calculate_dynamic_range(gray, metadata)
+            dynamic_range_score, dynamic_range_explanation = _calculate_dynamic_range(processed_gray, metadata)
         except Exception as e:
             logger.error(f"Dynamic Range calculation failed: {e}")
             dynamic_range_score, dynamic_range_explanation = 0.0, f"Error: {str(e)}"

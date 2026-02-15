@@ -90,7 +90,7 @@ def get_exposure_tolerance(shutter_speed: float) -> dict:
         return {'highlight_clip_tolerance': 0.02, 'shadow_clip_tolerance': 0.02, 'context': 'general'}
     
     if shutter_speed < 0.002:  # < 1/500s (action)
-        return {'highlight_clip_tolerance': 0.05, 'shadow_clip_tolerance': 0.10, 'context': 'action'}
+        return {'highlight_clip_tolerance': 0.05, 'shadow_clip_tolerance': 0.05, 'context': 'action'}
     elif shutter_speed > 0.033:  # > 1/30s (long exposure)
         return {'highlight_clip_tolerance': 0.01, 'shadow_clip_tolerance': 0.01, 'context': 'precision'}
     else:
