@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-02-15
+
+### 🚀 Performance Overhaul
+- **Fast Mode**: Introduced intelligent downsampling for sharpness metrics (`fast_mode=True`), reducing processing time from ~1.5s to ~0.19s per image (7.8x speedup) with minimal accuracy loss.
+- **Forensic Precision**: `fast_mode=False` retains the original pixel-perfect analysis for critical work.
+- **Optimization**: Default behavior for batch tools now prioritizes speed.
+
 ## [0.7.1] - 2026-02-08
 
 ### 🐛 Bug Fixes
