@@ -207,3 +207,18 @@ $$Score = Tech \cdot (0.8 + 0.2 \cdot Aesthetic)$$
 **No.**
 - **Local Execution**: The models (YOLO, etc.) are pre-trained. No data leaves your machine.
 - **Telemetry**: We collect anonymous usage stats (e.g., "User analyzed 500 photos"), but **never** image content, thumbnails, or filenames. You can disable this entirely with `PHOTOGRAPHI_TELEMETRY_DISABLED=1`.
+
+---
+
+## 8. References & Foundations
+
+### Computer Vision & Signal Processing
+1.  **Object Detection**: Redmon, J., et al. (2016). *You Only Look Once: Unified, Real-Time Object Detection*. IEEE CVPR. [arXiv:1506.02640](https://arxiv.org/abs/1506.02640)
+2.  **Focus Measures**: Krotkov, E. (1987). *Focusing*. International Journal of Computer Vision, 1(3). (Source of the Tenengrad Criterion).
+3.  **Blur Detection**: Pech-Pacheco, J. L., et al. (2000). *Diatom autofocusing in brightfield microscopy: a comparative study*. ICPR. (Source of Laplacian Variance).
+4.  **Natural Image Statistics**: Olshausen, B. A., & Field, D. J. (1996). *Emergence of simple-cell receptive field properties by learning a sparse code for natural images*. Nature. (Foundation for Gradient Sparsity analysis).
+
+### Photographic Standards
+5.  **Zone System**: Adams, A. (1981). *The Negative*. New York Graphic Society. (Basis for Exposure Analysis).
+6.  **Color Science**: CIE (1976). *Commission Internationale de l'Eclairage*. (Basis for LAB Color Space noise analysis).
+7.  **Dynamic Range**: Shannon, C. E. (1948). *A Mathematical Theory of Communication*. (Information Theoretic basis for Histogram Entropy).
