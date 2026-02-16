@@ -96,6 +96,22 @@ For professional photographers, the ability to analyze RAW files directly is cri
 
 ---
 
+### E. Volumetric Integrity: The Silhouette Trap
+
+**ELI5**: A black cutout against a white wall has a very sharp edge, but it has no detail inside. Simple algorithms mistake this high contrast for a "sharp photo." We need to know if the sharpness is from *texture* (good) or just an *outline* (bad).
+
+**The Challenge**:
+Early versions of the scoring engine gave near-perfect scores (0.97+) to underexposed silhouettes because the transition from black-to-white is mathematically the "sharpest" signal possible.
+
+**The Solution (v0.8.4)**:
+We implemented a multi-stage forensic check to trap these false positives:
+1.  **Gradient Sparsity**: We measure the "thinness" of the gradient field. Real texture has gradients everywhere; silhouettes only have them at the edges. If the sparsity > 95%, it's likely a cutout.
+2.  **FFT Frequency Analysis**: We convert the image to the frequency domain. Real focus has a broad spread of high frequencies. A step-function (edge) has a specific, narrow decay pattern.
+3.  **Technical Veto**: If both checks fail, the image is capped at a maximum score of **0.2** (Very Poor), regardless of how "sharp" the edge is.
+
+
+---
+
 ## 4. Visual Intelligence & Neural ROI
 
 ### YOLO26 Object Detection
@@ -112,6 +128,10 @@ For professional photographers, the ability to analyze RAW files directly is cri
 
 The final `overallConfidence` is calculated using a weighted gatekeeper formula:
 
+**Step 0: Technical Veto (The "Hard Deck")**
+Before weighting, the engine checks for critical flaws. If a photo fails a forensic check (e.g., Silhouette Trap, Motion Blur), the score is **hard-capped at 0.2**, regardless of other metrics.
+
+**Step 1: Weighted Fusion**
 $$Score = Tech \cdot (0.8 + 0.2 \cdot Aesthetic)$$
 
 **Weights**:
