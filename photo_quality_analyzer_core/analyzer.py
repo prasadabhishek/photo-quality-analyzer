@@ -20,6 +20,7 @@ try:
     import onnxruntime as ort
     from tqdm import tqdm
     import exifread
+    # Note: onnxruntime is used for model execution
     try:
         import rawpy
     except ImportError:
@@ -50,7 +51,6 @@ import shutil  # Added for moving files
 import configparser
 import io
 
-# Note: YOLO is imported in the try-except block above
 
 # --- Logger Setup ---
 logging.basicConfig(level=logging.INFO,
@@ -306,9 +306,9 @@ def load_yolo_model_and_names(model_path: str, coco_names_file_path: str, engine
     Initializes the YOLO (You Only Look Once) neural network for subject detection.
     
     Technology:
-    Uses the Ultralytics YOLO framework to identify 80+ common objects in the 
-    COCO dataset. This subject information is critical for distinguishing 
-    between an "out-of-focus subject" and a "bokeh background."
+    Uses ONNX Runtime to execute pre-trained YOLO models to identify 80+ common 
+    objects in the COCO dataset. This subject information is critical for 
+    distinguishing between an "out-of-focus subject" and a "bokeh background."
     
     Model Weights:
     The engine supports different model sizes (nano, small, medium, large).
@@ -320,22 +320,6 @@ def load_yolo_model_and_names(model_path: str, coco_names_file_path: str, engine
     loaded_model = None
     loaded_coco_names = None
     try:
-        # Explicitly check if the model_path is a directory, as YOLO() might not handle this gracefully.
-        if os.path.isdir(model_path):
-            raise IsADirectoryError(
-                f"The provided model path '{model_path}' is a directory. Please specify a path to a .pt model file."
-            )
-
-        # Attempt to load the model.
-        # Ultralytics' YOLO() constructor will:
-        # 1. Attempt to download if 'model_path' is a recognized model name (e.g., "yolov8n.pt").
-        # 2. Attempt to load from disk if 'model_path' is a file path (e.g., "./yolo11n.pt").
-        if str(model_path).endswith(".pt"):
-            logger.warning("Attempting to load a .pt model with ONNX engine. This is deprecated.")
-            # Fallback to model name if provided as path
-            if os.path.exists(model_path.replace(".pt", ".onnx")):
-                model_path = model_path.replace(".pt", ".onnx")
-
         loaded_model = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
         logger.info(f"Successfully loaded YOLO ONNX model: {model_path}")
 
@@ -378,8 +362,8 @@ def load_yolo_model_and_names(model_path: str, coco_names_file_path: str, engine
             f"An error occurred while loading/initializing the YOLO model '{model_path}': {e}", exc_info=True)
         logger.error("Please ensure that:")
         logger.error(
-            "  1. If using a standard model name (e.g., 'yolov8n.pt'), your internet connection is active for the first download.")
-        logger.error(f"  2. If '{model_path}' is a file path (like the default '{YOLO_MODEL_PATH_DEFAULT}'), it points to a valid and readable .onnx model file in the expected location.")
+            "  1. The model file path is correct and accessible.")
+        logger.error(f"  2. If '{model_path}' is a filename (like the default '{YOLO_MODEL_PATH_DEFAULT}'), it points to a valid and readable .onnx model file in the expected location.")
         logger.error(
             "  3. The 'onnxruntime' package is correctly installed.")
 
@@ -402,24 +386,27 @@ def ensure_yolo_initialized(model_size: str = "nano", engine: str = "yolo") -> N
         "yolo11": "yolo11n.onnx"
     }
     
-    # If model_size ends with .pt or .onnx, assume it's a direct path
-    if model_size.lower().endswith(".pt") or model_size.lower().endswith(".onnx"):
+    # If model_size ends with .onnx, assume it's a direct path
+    if model_size.lower().endswith(".onnx"):
         requested_model = model_size
     else:
-        # Try finding in local resources/models or package resources
+        # Try finding in package resources first
         model_filename = model_map.get(model_size.lower(), "yolo26n.onnx")
-        pkg_resource_path = os.path.join(PACKAGE_DIR, "resources", "models", model_filename)
-        local_resource_path = os.path.join(os.getcwd(), "resources", "models", model_filename)
+        
+        # Check package resources
+        pkg_resource_path = os.path.normpath(os.path.join(PACKAGE_DIR, "resources", "models", model_filename))
+        # Check local (for development)
+        local_resource_path = os.path.normpath(os.path.join(os.getcwd(), "resources", "models", model_filename))
         
         if os.path.exists(pkg_resource_path):
             requested_model = pkg_resource_path
         elif os.path.exists(local_resource_path):
             requested_model = local_resource_path
         else:
+            # Fallback to filename (hoping it's in the current dir or system path, though unlikely to work without path)
             requested_model = model_filename
-    
-    # If the model is already loaded and matches the requested size, skip
-    # (Note: g_yolo_model.model_name might differ if path is used, so we check the active config)
+
+    # If the model is already loaded, skip
     if g_yolo_model is not None:
         return True
         
@@ -506,12 +493,13 @@ def _calculate_gradient_sparsity(mag_sq: np.ndarray) -> float:
     """
     total_pixels = mag_sq.size
     peak_energy = np.max(mag_sq)
-    if peak_energy == 0:
-        return 0.0
-        
+    
     # Pixels that contribute significantly to the energy (top 10% of peak)
-    energy_threshold = peak_energy * 0.1
-    active_pixels = np.sum(mag_sq > energy_threshold)
+    if peak_energy > 0:
+        energy_threshold = peak_energy * 0.1
+        active_pixels = np.sum(mag_sq > energy_threshold)
+    else:
+        active_pixels = 0
     
     # Sparsity is the inverse of active pixel density
     # A true sharp photo has thousands of active edge pixels.
@@ -1653,6 +1641,16 @@ def evaluate_photo_quality(
     
     # Composite formula
     overall_confidence = tech_score * (0.8 + 0.2 * aesthetic_score)
+    
+    # Technical Veto: If a core technical metric is CRITICAL fail (< 0.05), cap the final confidence
+    # This prevents sharp-but-pitch-black photos from getting above ~0.3
+    crit_tech = ["sharpness", "exposure"]
+    for m in crit_tech:
+        if m in requested and scores_map[m] < 0.05:
+            veto_cap = 0.2
+            if overall_confidence > veto_cap:
+                overall_confidence = veto_cap
+                logger.info(f"Technical Veto Applied: {m} failure ({scores_map[m]:.2f}) capped final confidence at {veto_cap}")
 
     # Generate assessment summary
     judgement, judgement_description, image_description = _generate_assessment_summary(
