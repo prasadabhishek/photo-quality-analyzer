@@ -180,3 +180,29 @@ $$Score = Tech \cdot (0.8 + 0.2 \cdot Aesthetic)$$
 **Yes, but expect latency.**
 - **The Constraint**: The bottleneck is usually **I/O** (reading huge RAW files) and **Math** (FFT/Matrix operations).
 - **Recommendation**: It runs best on Apple Silicon (M-series) or machines with basic AVX2 support. On a Pi 4, a single image might take 4-5 seconds instead of 400ms.
+
+### Q: Does it modify my files?
+**Never.** `photographi` is strictly **Read-Only**.
+- **Safety**: It opens files in read-mode to extract data, calculates metrics in memory, and returns a JSON response. It never writes to the source image.
+- **Sidecars**: Future versions may offer to write `.xmp` sidecar files (e.g., `rating=5`), but this will be an opt-in flag, and even then, the source RAW file remains untouched.
+
+### Q: How does it handle Black & White (Monochrome) photos?
+**It adapts.**
+- **Sharpness/Focus**: Works perfectly (luminance only).
+- **Noise Analysis**: The "Chrominance Noise" score will naturally be 0.0, improving the overall score slightly.
+- **Color Palettes**: Will return grayscale hex codes (e.g., `#444444`, `#AAAAAA`).
+
+### Q: What about Film Scans or "Vintage" presets?
+**It might penalize them.**
+- **The Reality**: Film grain *is* noise. Soft vintage lenses *are* unsharp. `photographi` is an objective technical auditor. It will accurately report that the image is "noisy" and "soft."
+- **Usage Tip**: If you shoot film, ignore the "Noise" metric and focus on "Composition" and "Exposure."
+
+### Q: Does it detect "Closed Eyes" or "Smiling"?
+**Not yet.**
+- **Current State**: We use YOLOv8 which detects *Object Classes* (Person, Dog, Cat). It knows there is a human, but it doesn't analyze facial landmarks.
+- **Roadmap**: We are evaluating lightweight facial landmark models (like `mediapipe` or `dlib`) to add a "Blink Detection" features in v0.9.0 without blowing up the installation size.
+
+### Q: Is my data used to train the model?
+**No.**
+- **Local Execution**: The models (YOLO, etc.) are pre-trained. No data leaves your machine.
+- **Telemetry**: We collect anonymous usage stats (e.g., "User analyzed 500 photos"), but **never** image content, thumbnails, or filenames. You can disable this entirely with `PHOTOGRAPHI_TELEMETRY_DISABLED=1`.
