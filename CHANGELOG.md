@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.8.2] - 2026-02-15
+## [0.8.4] - 2026-02-15
+
+### Fixed
+- **Legacy Cleanup**: Completely removed vestigial references to `.pt` models and the `ultralytics` framework.
+- **ONNX Path Resolution**: Hardened the model path discovery logic to correctly prioritize pre-packaged models in `resources/models` across all environments (Local, CI, and UV runtime).
+- **Inference Diagnostics**: Improved error messaging when ONNX models are missing or corrupted.
+
+## [0.8.3] - 2026-02-15
 
 ### Fixed
 - **Silhouette Trap**: Corrected a major technical flaw where building silhouettes and high-contrast edges could trick the engine into a near-perfect sharpness score.
@@ -12,12 +19,6 @@ All notable changes to this project will be documented in this file.
 ### ⚡ Performance
 - **Fast Mode Optimization**: Refined the downsampling pipeline for FFT and Noise metrics, achieving sub-second analysis even for 45MP+ images.
 - **Technical Vetoes**: Implemented aggressive confidence caps for images with critical failures in exposure or focus, preventing "false positive" high scores.
-
-## [0.8.2] - 2026-02-15
-
-### Fixed
-- **Silhouette Trap**: Corrected a major technical flaw where building silhouettes and high-contrast edges could trick the engine into a near-perfect sharpness score.
-- **Gradient Sparsity Check**: Implemented volumetric texture analysis to distinguish paper-thin contrast edges from actual volumetric sharpness.
 - **FFT Frequency Analysis**: Added a second spectral check in the frequency domain to verify real micro-texture.
 
 ### ⚡ Performance
