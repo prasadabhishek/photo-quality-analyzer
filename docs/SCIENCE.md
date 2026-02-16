@@ -129,13 +129,14 @@ We implemented a multi-stage forensic check to trap these false positives:
 The final `overallConfidence` is calculated using a weighted gatekeeper formula:
 
 **Step 0: Technical Veto (The "Hard Deck")**
-Before weighting, the engine checks for critical flaws. If a photo fails a forensic check (e.g., Silhouette Trap, Motion Blur), the score is **hard-capped at 0.2**, regardless of other metrics.
+Before weighting, the engine checks for critical flaws. If a core metric (Sharpness, Exposure) drops below **0.05** (Critical Failure), or if a specific forensic check (Silhouette Trap) fails, the score is **hard-capped at 0.2**.
 
 **Step 1: Weighted Fusion**
 $$Score = Tech \cdot (0.8 + 0.2 \cdot Aesthetic)$$
 
 **Weights**:
-- **Technical (60%)**: Sharpness (40%), Focus (30%), Exposure (20%), Noise (10%).
+- **Technical (60%)**: Focus (45%), Sharpness (25%), Exposure (20%), Noise (10%).
+  *Note: We prioritize Subject Focus over Global Sharpness to prevent sharp backgrounds from saving missed portraits.*
 - **Aesthetic (40%)**: Dynamic Range (40%), Color Balance (40%), Composition (20%).
 
 **Linguistic Mapping**:
