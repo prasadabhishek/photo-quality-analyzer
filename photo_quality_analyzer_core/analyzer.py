@@ -1480,14 +1480,15 @@ def evaluate_photo_quality(
     metadata = _extract_metadata(image_path)
 
     # 0. Initialize Models & Run Detection (Centralized Visual Intelligence)
-    needs_yolo = "focus" in requested or "composition" in requested or "exposure" in requested
+    needs_yolo = enable_subject_detection and (
+        "focus" in requested or "composition" in requested or "exposure" in requested
+    )
     detections = []
-    
+
     if needs_yolo:
         ensure_yolo_initialized(model_size=model_size, engine=engine)
-        if enable_subject_detection:
-            # Run YOLO once for all metrics
-            detections = _detect_objects(img)
+        # Run YOLO once for all metrics
+        detections = _detect_objects(img)
 
     # Metrics Storage
     results = {}
